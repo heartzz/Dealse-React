@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: Lint, typecheck, and build workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  api-integration:
+    name: NestJS integration tests on PostgreSQL/PostGIS
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:18-3.7
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dealse_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dealse_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dealse_ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dealse/api db:generate
+      - run: pnpm --filter @dealse/api db:migrate:deploy
+      - run: pnpm --filter @dealse/api test
+
+  web-e2e:
+    name: Customer marketplace browser acceptance
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:18-3.7
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dealse_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dealse_dev"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dealse_dev?schema=public
+      OIDC_PROVIDER_ID: supabase-e2e
+      OIDC_ISSUER: https://dealse-e2e.invalid/auth/v1
+      OIDC_AUDIENCE: authenticated
+      OIDC_JWKS_URL: https://dealse-e2e.invalid/auth/v1/.well-known/jwks.json
+      DEALSE_API_URL: http://127.0.0.1:3102
+      NEXT_PUBLIC_SUPABASE_URL: https://dealse-e2e.invalid
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: e2e-placeholder-publishable-key
+      MEDIA_STORAGE_PROVIDER: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dealse/api db:generate
+      - run: pnpm --filter @dealse/api db:migrate:deploy
+      - run: pnpm --filter @dealse/api db:seed:demo
+      - run: pnpm --filter @dealse/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @dealse/web test:e2e

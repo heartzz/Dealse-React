@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# esbuild's postinstall selects/validates the native binary used by the web,
+# API tooling, and Expo bundler. Keep this explicit under pnpm's script policy.
+allowBuilds:
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+preferWorkspacePackages: true

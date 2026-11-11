@@ -1,0 +1,97 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #17202a;
+  background: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.foundation {
+  display: grid;
+  min-height: 100vh;
+  align-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.foundation h1,
+.foundation p {
+  margin: 0;
+}
+
+.foundation h1 {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  letter-spacing: -0.04em;
+}
+
+.foundation > p:last-child {
+  max-width: 36rem;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  color: #009688;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+a { color: inherit; }
+
+.home-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.75rem; }
+.text-link { color: #007f73; font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.auth-shell { min-height: 100vh; padding: 1.5rem; background: linear-gradient(135deg, #f5fbfa, #fff7fa); }
+.auth-brand { width: min(100%, 68rem); margin: 0 auto 2.5rem; display: flex; justify-content: space-between; align-items: center; color: #667085; font-size: 0.9rem; }
+.brand-mark { color: #008f83; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.06em; text-decoration: none; }
+.auth-card { width: min(100%, 27rem); margin: 0 auto; padding: clamp(1.5rem, 5vw, 2.25rem); border: 1px solid #e6eaed; border-radius: 1.25rem; background: #fff; box-shadow: 0 20px 60px rgb(22 48 57 / 8%); }
+.auth-card h1 { margin: 0.4rem 0 0.5rem; color: #18212b; font-size: clamp(1.8rem, 5vw, 2.2rem); letter-spacing: -0.04em; }
+.auth-description { margin: 0 0 1.5rem; color: #667085; line-height: 1.6; }
+.auth-form { display: grid; gap: 1rem; }
+.field { display: grid; gap: 0.45rem; color: #344054; font-size: 0.92rem; font-weight: 650; }
+.field input { width: 100%; min-height: 2.9rem; padding: 0.7rem 0.8rem; border: 1px solid #d0d5dd; border-radius: 0.65rem; background: #fff; color: #18212b; font: inherit; font-weight: 400; }
+.field input:focus-visible, .primary-button:focus-visible, .text-link:focus-visible { outline: 3px solid rgb(0 150 136 / 25%); outline-offset: 2px; }
+.primary-button { min-height: 3rem; border: 0; border-radius: 0.7rem; background: #008f83; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
+.primary-button:hover { background: #00766d; }
+.auth-footer { margin-top: 1.25rem; color: #667085; font-size: 0.92rem; line-height: 1.7; }
+.auth-footer p { margin: 0.45rem 0; }
+.form-message { margin: 0 0 1rem; padding: 0.75rem; border-radius: 0.65rem; line-height: 1.5; font-size: 0.9rem; }
+.form-message--error { background: #fff1f0; color: #9f2d25; }
+.form-message--info { background: #eef8f6; color: #17685f; }
+.dashboard-shell { min-height: 100vh; padding: 1.5rem; background: #f8fafc; }
+.dashboard-header, .dashboard-card { width: min(100%, 68rem); margin: 0 auto; }
+.dashboard-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0 2.5rem; }
+.dashboard-card { padding: clamp(1.5rem, 5vw, 2.5rem); border: 1px solid #e6eaed; border-radius: 1.1rem; background: white; }
+.saved-deals-panel { margin-top: 1.25rem; }
+.saved-deals-panel h2 { margin: 0 0 1rem; font-size: 1.3rem; }
+.saved-deals-list { display: grid; gap: 0.85rem; }
+.saved-deal-row { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 0.85rem; border: 1px solid #e8ecef; border-radius: 0.9rem; }
+.saved-deal-row > img { width: 6.5rem; height: 5.4rem; border-radius: 0.65rem; object-fit: cover; }
+.saved-deal-row h3 { margin: 0.1rem 0 0.2rem; font-size: 1.05rem; }
+.saved-deal-row p { margin: 0.2rem 0; color: #667085; font-size: 0.9rem; }
+.saved-deal-row .eyebrow { color: #0a827b; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+.saved-deal-row strong { color: #0a827b; font-size: 0.9rem; }
+.saved-deal-row > a, .saved-deals-empty a { color: #087c75; font-weight: 700; text-decoration: none; }
+.saved-deals-empty { padding: 1.25rem; border-radius: 0.85rem; background: #f7faf9; }
+.saved-deals-empty p { margin-top: 0; color: #667085; }
+.dashboard-card h1 { margin: 0.5rem 0; font-size: clamp(1.8rem, 5vw, 2.4rem); letter-spacing: -0.04em; }
+.muted { color: #667085; line-height: 1.6; }
+.status-pill { display: inline-flex; padding: 0.35rem 0.7rem; border-radius: 999px; background: #eaf7f3; color: #17745f; font-size: 0.8rem; font-weight: 700; text-transform: capitalize; }
+.customer-profile-edit { max-width: 34rem; display: grid; gap: 0.55rem; margin-top: 1.2rem; color: #344054; font-size: 0.9rem; font-weight: 650; }
+.customer-profile-edit > div { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+.customer-profile-edit input { min-width: 0; min-height: 3rem; flex: 1 1 14rem; padding: 0.7rem 0.8rem; border: 1px solid #d0d5dd; border-radius: 0.65rem; background: #fff; color: #18212b; font: inherit; font-weight: 400; }
+.customer-profile-edit button { min-width: 8rem; padding-inline: 1rem; }
+.logout-button { padding: 0.6rem 0.85rem; border: 1px solid #d0d5dd; border-radius: 0.6rem; background: white; color: #344054; font: inherit; cursor: pointer; }
+@media (max-width: 600px) { .saved-deal-row { grid-template-columns: 5rem minmax(0, 1fr); } .saved-deal-row > img { width: 5rem; height: 4.75rem; } .saved-deal-row > a { grid-column: 2; } }
+@media (max-width: 480px) { .auth-shell { padding: 1rem; } .auth-brand { margin-bottom: 1.5rem; } .dashboard-header { align-items: flex-start; } }

@@ -1,0 +1,129 @@
+.retailer-workspace .deal-wizard-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0 0 10px;padding:15px 0 17px;border-bottom:1px solid #edf1f0}
+.retailer-workspace .deal-wizard-progress button{position:relative;display:flex;align-items:center;gap:8px;padding:0;border:0;background:none;color:#758580;text-align:left;cursor:pointer}
+.retailer-workspace .deal-wizard-progress button:not(:last-child)::after{position:absolute;top:15px;left:33px;right:5px;height:1px;background:#e0e9e6;content:""}
+.retailer-workspace .deal-wizard-progress button>span{z-index:1;width:30px;height:30px;flex:none;display:grid;place-items:center;border:1px solid #dce8e4;border-radius:50%;background:#fff;color:#768580;font-size:11px;font-weight:700}
+.retailer-workspace .deal-wizard-progress button small{color:inherit;font-size:10px;font-weight:600}
+.retailer-workspace .deal-wizard-progress button:disabled{cursor:not-allowed;opacity:.55}
+.retailer-workspace .deal-wizard-progress button.active{color:#00796b}
+.retailer-workspace .deal-wizard-progress button.active>span,.retailer-workspace .deal-wizard-progress button.complete>span{border-color:#009688;background:#e6f4f2;color:#00796b}
+.retailer-workspace .deal-wizard-step{min-height:235px}
+.retailer-workspace .deal-wizard-footer{position:sticky;bottom:0;z-index:3;display:flex;align-items:center;gap:10px;margin:0 -20px -20px;padding:14px 20px;border-top:1px solid #e7eeeb;border-radius:0 0 10px 10px;background:#ffffffed;backdrop-filter:blur(10px)}
+.retailer-workspace .deal-wizard-footer .workspace-form-actions-spacer{flex:1}
+.retailer-workspace .deal-wizard-footer .retailer-button,.retailer-workspace .deal-wizard-footer .workspace-secondary-button{min-height:44px;padding:0 16px;font-size:12px}
+.retailer-workspace .deal-price-result{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:13px 15px;border:1px solid #cce9df;border-radius:9px;background:#f1faf6;color:#08796f}
+.retailer-workspace .deal-price-result>span{display:grid;gap:3px}
+.retailer-workspace .deal-price-result strong{font-size:14px}
+.retailer-workspace .deal-price-result small{color:#607a70;font-size:11px}
+.retailer-workspace .deal-image-editor{display:grid;align-content:center;gap:12px}
+.retailer-workspace .workspace-product-search{display:flex;align-items:center;gap:9px;max-width:390px;min-height:42px;margin:16px 0 4px;padding:0 12px;border:1px solid #dfe8e5;border-radius:8px;background:#fff;color:#72817d}
+.retailer-workspace .workspace-product-search:focus-within{border-color:#009688;outline:3px solid #d7f0eb}
+.retailer-workspace .workspace-product-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#243631;font-size:13px}
+.retailer-workspace .workspace-product-search input:focus-visible{outline:0}
+.retailer-workspace .workspace-account-signout{min-height:40px;margin-top:18px;padding:0 14px;border:1px solid #dce9e5;border-radius:7px;background:#fff;color:#00796b;font-size:12px;font-weight:700;cursor:pointer}
+.retailer-workspace .workspace-mobile-nav{display:none}
+@media(max-width:700px){
+  .site-shell.retailer-view:has(.retailer-workspace){overflow:visible}
+  .retailer-workspace{display:flex;min-height:100dvh;flex-direction:column;padding-bottom:calc(76px + env(safe-area-inset-bottom));}
+  .retailer-workspace .workspace-sidebar{position:relative;top:auto;height:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,44%);align-items:center;gap:8px;padding:10px 16px;border-right:0;border-bottom:1px solid #e4ecea}
+  .retailer-workspace .workspace-brand{padding:0}
+  .retailer-workspace .workspace-brand img{width:32px;height:32px}
+  .retailer-workspace .workspace-brand strong{font-size:17px}
+  .retailer-workspace .workspace-brand small{font-size:10px}
+  .retailer-workspace .workspace-store-chip{max-width:100%;margin:0;padding:5px 7px;border:0;background:#f8fbfa}
+  .retailer-workspace .workspace-store-icon{width:29px;height:29px}
+  .retailer-workspace .workspace-store-chip strong{max-width:calc(100vw - 220px);font-size:10px}
+  .retailer-workspace .workspace-store-chip small{font-size:9px}
+  .retailer-workspace .workspace-sidebar nav,.retailer-workspace .workspace-sidebar-bottom{display:none}
+  .retailer-workspace .workspace-main{width:100%;min-width:0}
+  .retailer-workspace .workspace-topbar{height:48px;padding:0 16px}
+  .retailer-workspace .workspace-topbar p{font-size:11px}
+  .retailer-workspace .workspace-top-status{padding:6px 8px;font-size:8px}
+  .retailer-workspace .workspace-content{width:100%;padding:20px 16px 28px}
+  .retailer-workspace .workspace-welcome{gap:12px;margin-bottom:18px}
+  .retailer-workspace .workspace-welcome h1{font-size:25px;line-height:1.15}
+  .retailer-workspace .workspace-welcome>div>p:last-child{font-size:13px;line-height:1.5}
+  .retailer-workspace .workspace-welcome>.retailer-button{min-height:44px;padding:0 15px;font-size:12px}
+  .retailer-workspace .workspace-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .retailer-workspace .workspace-stat-grid article{min-height:105px;display:flex;align-items:flex-start;padding:12px 10px}
+  .retailer-workspace .workspace-stat-icon{width:30px;height:30px;margin-bottom:8px}
+  .retailer-workspace .workspace-stat-grid article small{font-size:10px}
+  .retailer-workspace .workspace-stat-grid article strong{font-size:17px}
+  .retailer-workspace .workspace-stat-grid article em{font-size:9px;line-height:1.35}
+  .retailer-workspace .workspace-panel{border-radius:12px}
+  .retailer-workspace .workspace-offer-panel,.retailer-workspace .workspace-checklist{padding:16px}
+  .retailer-workspace .workspace-panel-heading h2{font-size:16px}
+  .retailer-workspace .workspace-panel-heading p{font-size:11px;line-height:1.45}
+  .retailer-workspace .workspace-empty h3{font-size:15px}
+  .retailer-workspace .workspace-empty p{font-size:12px;line-height:1.5}
+  .retailer-workspace .workspace-form-panel{padding:16px}
+  .retailer-workspace .workspace-form-titlebar{align-items:flex-start;gap:10px}
+  .retailer-workspace .workspace-form-titlebar h2{font-size:21px}
+  .retailer-workspace .workspace-form-titlebar p,.retailer-workspace .workspace-form-section-heading p{font-size:12px;line-height:1.5}
+  .retailer-workspace .workspace-form-section{padding:17px 0}
+  .retailer-workspace .workspace-form-section-heading{gap:10px;margin-bottom:14px}
+  .retailer-workspace .workspace-form-section-heading h3{font-size:15px}
+  .retailer-workspace .workspace-form-grid{grid-template-columns:1fr;gap:14px}
+  .retailer-workspace .workspace-form-grid>.workspace-field-wide{grid-column:auto}
+  .retailer-workspace .workspace-field{gap:7px;font-size:12px}
+  .retailer-workspace .workspace-field input,.retailer-workspace .workspace-field select,.retailer-workspace .workspace-field textarea{min-height:48px;padding:11px 12px;border-radius:8px;font-size:16px}
+  .retailer-workspace .workspace-field textarea{min-height:92px}
+  .retailer-workspace .deal-wizard-progress{gap:2px;margin-inline:-4px;padding:14px 0}
+  .retailer-workspace .deal-wizard-progress button{justify-content:center;gap:5px}
+  .retailer-workspace .deal-wizard-progress button:not(:last-child)::after{left:calc(50% + 14px);right:calc(-50% + 14px);top:14px}
+  .retailer-workspace .deal-wizard-progress button>span{width:28px;height:28px;font-size:10px}
+  .retailer-workspace .deal-wizard-progress button small{max-width:64px;font-size:9px;text-align:center}
+  .retailer-workspace .deal-wizard-step{min-height:0}
+  .retailer-workspace .deal-wizard-footer{position:sticky;bottom:calc(66px + env(safe-area-inset-bottom));flex-wrap:wrap;gap:8px;margin:0 -16px -16px;padding:11px 14px;border-radius:0 0 12px 12px}
+  .retailer-workspace .deal-wizard-footer .workspace-form-actions-spacer{display:none}
+  .retailer-workspace .deal-wizard-footer .retailer-button,.retailer-workspace .deal-wizard-footer .workspace-secondary-button{flex:1 1 auto;min-height:46px;padding:0 12px;font-size:12px}
+  .retailer-workspace .deal-wizard-footer>button:first-child{flex-basis:100%}
+  .retailer-workspace .workspace-offer-image-control{grid-template-columns:1fr;gap:12px}
+  .retailer-workspace .workspace-image-preview-tile{height:190px}
+  .retailer-workspace .workspace-product-picker{grid-template-columns:1fr}
+  .retailer-workspace .workspace-preview-layout{grid-template-columns:1fr}
+  .retailer-workspace .workspace-marketplace-image{height:190px}
+  .retailer-workspace .workspace-preview-terms{padding:15px}
+  .retailer-workspace .workspace-offer-row{grid-template-columns:48px minmax(0,1fr);gap:10px}
+  .retailer-workspace .workspace-offer-thumb{width:48px;height:48px}
+  .retailer-workspace .workspace-offer-row>div strong{font-size:12px}
+  .retailer-workspace .workspace-offer-row>div p,.retailer-workspace .workspace-offer-row>div small{font-size:10px}
+  .retailer-workspace .workspace-offer-row>button{grid-row:auto;grid-column:auto;min-height:40px;padding:0 12px;font-size:11px}
+  .retailer-workspace .workspace-offer-row>button:first-of-type{grid-column:2}
+  .retailer-workspace .workspace-draft-status{grid-column:2;justify-self:start;font-size:9px}
+  .retailer-workspace .workspace-product-row{grid-template-columns:38px minmax(0,1fr);gap:9px}
+  .retailer-workspace .workspace-product-row>div strong{font-size:13px}
+  .retailer-workspace .workspace-product-row>div p,.retailer-workspace .workspace-product-row>div small{font-size:10px}
+  .retailer-workspace .workspace-product-actions{grid-column:2;justify-content:flex-start}
+  .retailer-workspace .workspace-product-actions>button{min-height:40px;padding:0 13px;font-size:11px}
+  .retailer-workspace .workspace-profile-card{gap:12px;padding:16px}
+  .retailer-workspace .workspace-profile-avatar{width:44px;height:44px}
+  .retailer-workspace .workspace-profile-main h2{font-size:18px}
+  .retailer-workspace .workspace-profile-main>p{font-size:12px}
+  .retailer-workspace .workspace-profile-details{grid-template-columns:1fr;gap:12px;margin-top:15px;padding-top:14px}
+  .retailer-workspace .workspace-profile-details small{font-size:10px}
+  .retailer-workspace .workspace-profile-details strong{font-size:12px}
+  .retailer-workspace .workspace-mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:20;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));align-items:center;gap:1px;padding:7px 7px max(8px,env(safe-area-inset-bottom));border-top:1px solid #e4ecea;background:#ffffffed;box-shadow:0 -7px 20px #19332b0b;backdrop-filter:blur(12px)}
+  .retailer-workspace .workspace-mobile-nav>button{min-width:0;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:2px;border:0;border-radius:9px;background:transparent;color:#71817c;font-size:9px;font-weight:700;white-space:nowrap}
+  .retailer-workspace .workspace-mobile-nav>button>span{font-size:19px;line-height:1}
+  .retailer-workspace .workspace-mobile-nav>button.active{color:#00796b;background:#e9f5f2}
+  .retailer-workspace .workspace-mobile-nav>.workspace-mobile-create{min-height:54px;margin-top:-14px;border:3px solid #f5f8f7;border-radius:13px;background:#009688;color:#fff;box-shadow:0 5px 14px #00796b33;font-size:9px}
+  .retailer-workspace .workspace-mobile-nav>.workspace-mobile-create>span{font-size:22px}
+  .retailer-workspace .workspace-product-search{max-width:none;min-height:46px}
+  .retailer-workspace .workspace-product-search input{font-size:16px}
+}
+@media(max-width:390px){
+  .retailer-workspace .workspace-sidebar{grid-template-columns:minmax(0,1fr) minmax(110px,45%);padding-inline:12px}
+  .retailer-workspace .workspace-brand small{font-size:9px}
+  .retailer-workspace .workspace-store-chip strong{max-width:calc(100vw - 195px)}
+  .retailer-workspace .workspace-stat-grid{grid-template-columns:1fr;gap:7px}
+  .retailer-workspace .workspace-stat-grid article{min-height:66px;display:grid;grid-template-columns:35px 1fr auto;align-items:center;padding:9px 11px}
+  .retailer-workspace .workspace-stat-icon{grid-row:span 2;margin:0}
+  .retailer-workspace .workspace-stat-grid article small{font-size:10px}
+  .retailer-workspace .workspace-stat-grid article strong{margin:0;font-size:15px}
+  .retailer-workspace .workspace-stat-grid article em{grid-column:2/-1;margin-top:2px;font-size:9px}
+  .retailer-workspace .deal-wizard-progress button small{max-width:52px;font-size:8px}
+  .retailer-workspace .deal-wizard-footer{gap:6px;padding-inline:10px}
+  .retailer-workspace .workspace-mobile-nav{padding-inline:3px}
+  .retailer-workspace .workspace-mobile-nav>button{font-size:8px}
+}
+.retailer-workspace .workspace-notification-link{display:inline-flex;align-items:center;gap:6px;flex:none;color:#08796f;font-size:11px;font-weight:700;text-decoration:none}.retailer-workspace .workspace-notification-link>span{min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px;border-radius:50%;background:#e6f4f2;color:#08796f;font-size:10px}.retailer-workspace .workspace-topbar{gap:10px}@media(max-width:700px){.retailer-workspace .workspace-notification-link{font-size:10px}.retailer-workspace .workspace-topbar{gap:7px}.retailer-workspace .workspace-top-status{padding:5px 6px;font-size:7px}}

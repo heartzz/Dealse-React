@@ -1,0 +1,608 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  moduleFormat    = "esm"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+enum UserStatus {
+  ACTIVE    @map("active")
+  SUSPENDED @map("suspended")
+  DELETED   @map("deleted")
+
+  @@map("user_status")
+}
+
+enum AccountRole {
+  CUSTOMER @map("customer")
+  RETAILER @map("retailer")
+  ADMIN    @map("admin")
+
+  @@map("account_role")
+}
+
+enum RetailerStatus {
+  PENDING   @map("pending")
+  ACTIVE    @map("active")
+  SUSPENDED @map("suspended")
+  CLOSED    @map("closed")
+
+  @@map("retailer_status")
+}
+
+enum MembershipRole {
+  OWNER   @map("owner")
+  MANAGER @map("manager")
+  STAFF   @map("staff")
+
+  @@map("membership_role")
+}
+
+enum MembershipStatus {
+  INVITED @map("invited")
+  ACTIVE  @map("active")
+  REVOKED @map("revoked")
+
+  @@map("membership_status")
+}
+
+enum StoreStatus {
+  DRAFT                @map("draft")
+  PENDING_VERIFICATION @map("pending_verification")
+  ACTIVE               @map("active")
+  PAUSED               @map("paused")
+  CLOSED               @map("closed")
+
+  @@map("store_status")
+}
+
+enum ProductStatus {
+  DRAFT    @map("draft")
+  ACTIVE   @map("active")
+  ARCHIVED @map("archived")
+
+  @@map("product_status")
+}
+
+enum DealStatus {
+  DRAFT     @map("draft")
+  PUBLISHED @map("published")
+  PAUSED    @map("paused")
+  ENDED     @map("ended")
+
+  @@map("deal_status")
+}
+
+enum DealReportReason {
+  MISLEADING    @map("misleading")
+  EXPIRED       @map("expired")
+  INAPPROPRIATE @map("inappropriate")
+  OTHER         @map("other")
+
+  @@map("deal_report_reason")
+}
+
+enum DealReportStatus {
+  OPEN      @map("open")
+  RESOLVED  @map("resolved")
+  DISMISSED @map("dismissed")
+
+  @@map("deal_report_status")
+}
+
+enum OfferType {
+  PERCENTAGE   @map("percentage")
+  FIXED_AMOUNT @map("fixed_amount")
+  BUY_X_GET_Y  @map("buy_x_get_y")
+  OTHER        @map("other")
+
+  @@map("offer_type")
+}
+
+enum MediaPurpose {
+  STORE   @map("store")
+  PRODUCT @map("product")
+  DEAL    @map("deal")
+  AVATAR  @map("avatar")
+
+  @@map("media_purpose")
+}
+
+enum MediaProcessingStatus {
+  PENDING     @map("pending")
+  QUARANTINED @map("quarantined")
+  READY       @map("ready")
+  REJECTED    @map("rejected")
+  DELETED     @map("deleted")
+
+  @@map("media_processing_status")
+}
+
+enum RedemptionCodeStatus {
+  ISSUED   @map("issued")
+  REDEEMED @map("redeemed")
+  EXPIRED  @map("expired")
+  REVOKED  @map("revoked")
+
+  @@map("redemption_code_status")
+}
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  authProvider    String     @map("auth_provider") @db.VarChar(64)
+  authSubject     String     @map("auth_subject") @db.VarChar(255)
+  emailNormalized String?    @map("email_normalized") @db.VarChar(320)
+  emailVerifiedAt DateTime?  @map("email_verified_at") @db.Timestamptz(6)
+  status          UserStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastSignedInAt  DateTime?  @map("last_signed_in_at") @db.Timestamptz(6)
+
+  profile             UserProfile?
+  accountRoles        UserAccountRole[]
+  memberships         RetailerMembership[] @relation("MembershipUser")
+  invitedMemberships  RetailerMembership[] @relation("MembershipInviter")
+  createdRetailers    Retailer[]           @relation("RetailerCreator")
+  createdProducts     Product[]            @relation("ProductCreator")
+  createdDeals        Deal[]               @relation("DealCreator")
+  verifiedStores      Store[]              @relation("StoreVerifier")
+  uploadedMedia       MediaAsset[]         @relation("MediaOwner")
+  favourites          Favourite[]
+  followedStores      FollowedStore[]
+  notifications       Notification[]   @relation("NotificationRecipient")
+  redemptionCodes     RedemptionCode[]     @relation("CodeCustomer")
+  customerRedemptions Redemption[]         @relation("RedemptionCustomer")
+  staffRedemptions    Redemption[]         @relation("RedemptionStaff")
+  auditEvents         AuditLog[]           @relation("AuditActor")
+  moderatedDeals      Deal[]               @relation("DealModerator")
+  filedDealReports    DealReport[]         @relation("DealReportReporter")
+  reviewedDealReports DealReport[]         @relation("DealReportReviewer")
+
+  @@unique([authProvider, authSubject])
+  @@index([status, createdAt])
+  @@map("users")
+}
+
+model UserAccountRole {
+  userId    String      @map("user_id") @db.Uuid
+  role      AccountRole
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([role, createdAt])
+  @@map("user_account_roles")
+}
+
+model UserProfile {
+  userId      String   @id @map("user_id") @db.Uuid
+  displayName String?  @map("display_name") @db.VarChar(120)
+  phoneE164   String?  @map("phone_e164") @db.VarChar(20)
+  locale      String   @default("en") @db.VarChar(16)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("user_profiles")
+}
+
+model Retailer {
+  id              String         @id @default(uuid()) @db.Uuid
+  displayName     String         @map("display_name") @db.VarChar(180)
+  legalName       String?        @map("legal_name") @db.VarChar(255)
+  status          RetailerStatus @default(PENDING)
+  createdByUserId String         @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  closedAt        DateTime?      @map("closed_at") @db.Timestamptz(6)
+
+  createdBy   User                 @relation("RetailerCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  memberships RetailerMembership[]
+  stores      Store[]
+  products    Product[]
+  auditEvents AuditLog[]
+
+  @@index([status, createdAt])
+  @@map("retailers")
+}
+
+model RetailerMembership {
+  id              String           @id @default(uuid()) @db.Uuid
+  retailerId      String           @map("retailer_id") @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  role            MembershipRole
+  status          MembershipStatus @default(INVITED)
+  invitedEmail    String?          @map("invited_email") @db.VarChar(320)
+  invitedByUserId String?          @map("invited_by_user_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(6)
+
+  retailer  Retailer @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+  user      User     @relation("MembershipUser", fields: [userId], references: [id], onDelete: Restrict)
+  invitedBy User?    @relation("MembershipInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([retailerId, userId])
+  @@index([userId, status])
+  @@index([retailerId, status])
+  @@map("retailer_memberships")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  slug      String   @unique @db.VarChar(100)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  stores   Store[]
+  products Product[]
+  deals    Deal[]
+
+  @@index([parentId, sortOrder])
+  @@index([isActive, sortOrder])
+  @@map("categories")
+}
+
+model Store {
+  id               String                                 @id @default(uuid()) @db.Uuid
+  retailerId       String                                 @map("retailer_id") @db.Uuid
+  categoryId       String?                                @map("category_id") @db.Uuid
+  slug             String                                 @db.VarChar(120)
+  name             String                                 @db.VarChar(180)
+  description      String?                                @db.Text
+  phone            String?                                @db.VarChar(32)
+  email            String?                                @db.VarChar(320)
+  addressLine1     String?                                @map("address_line1") @db.VarChar(255)
+  addressLine2     String?                                @map("address_line2") @db.VarChar(255)
+  locality         String?                                @db.VarChar(120)
+  city             String                                 @db.VarChar(100)
+  region           String                                 @db.VarChar(100)
+  postalCode       String?                                @map("postal_code") @db.VarChar(24)
+  countryCode      String                                 @default("IN") @map("country_code") @db.Char(2)
+  location         Unsupported("geography(Point, 4326)")?
+  timezone         String                                 @default("Asia/Kolkata") @db.VarChar(64)
+  openingHours     Json?                                  @map("opening_hours") @db.JsonB
+  status           StoreStatus                            @default(DRAFT)
+  verifiedAt       DateTime?                              @map("verified_at") @db.Timestamptz(6)
+  verifiedByUserId String?                                @map("verified_by_user_id") @db.Uuid
+  createdAt        DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publishedAt      DateTime?                              @map("published_at") @db.Timestamptz(6)
+
+  retailer    Retailer        @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  verifiedBy  User?           @relation("StoreVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+  products    Product[]
+  deals       Deal[]
+  images      StoreImage[]
+  followers   FollowedStore[]
+  notifications Notification[]
+  redemptions Redemption[]
+
+  @@unique([retailerId, slug])
+  @@index([retailerId, status])
+  @@index([city, region, status])
+  @@map("stores")
+}
+
+model Product {
+  id              String        @id @default(uuid()) @db.Uuid
+  retailerId      String        @map("retailer_id") @db.Uuid
+  storeId         String?       @map("store_id") @db.Uuid
+  categoryId      String        @map("category_id") @db.Uuid
+  createdByUserId String        @map("created_by_user_id") @db.Uuid
+  slug            String        @db.VarChar(140)
+  name            String        @db.VarChar(180)
+  description     String?       @db.Text
+  brand           String?       @db.VarChar(120)
+  status          ProductStatus @default(DRAFT)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  retailer     Retailer       @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+  store        Store?         @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category     Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy    User           @relation("ProductCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  images       ProductImage[]
+  dealProducts DealProduct[]
+
+  @@unique([retailerId, slug])
+  @@index([retailerId, status, updatedAt])
+  @@index([categoryId, status])
+  @@index([storeId, status])
+  @@map("products")
+}
+
+model MediaAsset {
+  id               String                @id @default(uuid()) @db.Uuid
+  ownerUserId      String                @map("owner_user_id") @db.Uuid
+  storageProvider  String                @map("storage_provider") @db.VarChar(32)
+  bucket           String                @db.VarChar(128)
+  objectKey        String                @unique @map("object_key") @db.VarChar(512)
+  purpose          MediaPurpose
+  mimeType         String                @map("mime_type") @db.VarChar(127)
+  byteSize         BigInt                @map("byte_size")
+  width            Int?
+  height           Int?
+  checksumSha256   String?               @map("checksum_sha256") @db.Char(64)
+  processingStatus MediaProcessingStatus @default(PENDING) @map("processing_status")
+  altText          String?               @map("alt_text") @db.VarChar(500)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  readyAt          DateTime?             @map("ready_at") @db.Timestamptz(6)
+  deletedAt        DateTime?             @map("deleted_at") @db.Timestamptz(6)
+
+  owner         User           @relation("MediaOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  storeImages   StoreImage[]
+  productImages ProductImage[]
+  dealImages    DealImage[]
+
+  @@index([ownerUserId, createdAt])
+  @@index([processingStatus, createdAt])
+  @@map("media_assets")
+}
+
+model StoreImage {
+  storeId      String  @map("store_id") @db.Uuid
+  mediaAssetId String  @map("media_asset_id") @db.Uuid
+  sortOrder    Int     @default(0) @map("sort_order") @db.SmallInt
+  isPrimary    Boolean @default(false) @map("is_primary")
+
+  store      Store      @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@id([storeId, mediaAssetId])
+  @@unique([storeId, sortOrder])
+  @@index([mediaAssetId])
+  @@map("store_images")
+}
+
+model ProductImage {
+  productId    String  @map("product_id") @db.Uuid
+  mediaAssetId String  @map("media_asset_id") @db.Uuid
+  sortOrder    Int     @default(0) @map("sort_order") @db.SmallInt
+  isPrimary    Boolean @default(false) @map("is_primary")
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@id([productId, mediaAssetId])
+  @@unique([productId, sortOrder])
+  @@index([mediaAssetId])
+  @@map("product_images")
+}
+
+model Deal {
+  id                  String     @id @default(uuid()) @db.Uuid
+  storeId             String     @map("store_id") @db.Uuid
+  categoryId          String?    @map("category_id") @db.Uuid
+  createdByUserId     String     @map("created_by_user_id") @db.Uuid
+  slug                String     @db.VarChar(140)
+  title               String     @db.VarChar(180)
+  summary             String?    @db.VarChar(320)
+  details             String?    @db.Text
+  terms               String     @db.Text
+  offerType           OfferType  @map("offer_type")
+  discountBps         Int?       @map("discount_bps")
+  discountAmountMinor BigInt?    @map("discount_amount_minor")
+  currency            String?    @db.Char(3)
+  originalPriceMinor  BigInt?    @map("original_price_minor")
+  offerPriceMinor     BigInt?    @map("offer_price_minor")
+  imageReference      String?    @map("image_reference") @db.VarChar(1000)
+  startsAt            DateTime   @map("starts_at") @db.Timestamptz(6)
+  endsAt              DateTime   @map("ends_at") @db.Timestamptz(6)
+  storeTimezone       String     @map("store_timezone") @db.VarChar(64)
+  status              DealStatus @default(DRAFT)
+  maxRedemptions      Int?       @map("max_redemptions")
+  redemptionCount     Int        @default(0) @map("redemption_count")
+  perCustomerLimit    Int        @default(1) @map("per_customer_limit")
+  version             Int        @default(1)
+  publishedAt         DateTime?  @map("published_at") @db.Timestamptz(6)
+  moderationHoldAt    DateTime?  @map("moderation_hold_at") @db.Timestamptz(6)
+  moderationHoldByUserId String? @map("moderation_hold_by_user_id") @db.Uuid
+  moderationReason    String?    @map("moderation_reason") @db.VarChar(500)
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  store       Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category    Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy   User             @relation("DealCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  moderationHeldBy User?       @relation("DealModerator", fields: [moderationHoldByUserId], references: [id], onDelete: SetNull)
+  products    DealProduct[]
+  images      DealImage[]
+  reports     DealReport[]
+  notifications Notification[]
+  favourites  Favourite[]
+  codes       RedemptionCode[]
+  redemptions Redemption[]
+
+  @@unique([storeId, slug])
+  @@unique([id, storeId])
+  @@index([storeId, createdAt])
+  @@index([categoryId, status, startsAt, endsAt])
+  @@index([status, startsAt, endsAt])
+  @@map("deals")
+}
+
+model DealReport {
+  id               String           @id @default(uuid()) @db.Uuid
+  dealId           String           @map("deal_id") @db.Uuid
+  reporterUserId   String           @map("reporter_user_id") @db.Uuid
+  reason           DealReportReason
+  details          String?          @db.VarChar(1000)
+  status           DealReportStatus @default(OPEN)
+  resolution       String?          @db.VarChar(1000)
+  reviewedByUserId String?          @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt       DateTime?        @map("reviewed_at") @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  deal       Deal  @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  reporter   User  @relation("DealReportReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("DealReportReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([dealId, reporterUserId])
+  @@index([status, createdAt])
+  @@index([reporterUserId, createdAt])
+  @@map("deal_reports")
+}
+
+model DealProduct {
+  dealId       String @map("deal_id") @db.Uuid
+  productId    String @map("product_id") @db.Uuid
+  displayOrder Int    @default(0) @map("display_order") @db.SmallInt
+
+  deal    Deal    @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([dealId, productId])
+  @@index([productId, dealId])
+  @@map("deal_products")
+}
+
+model DealImage {
+  dealId       String  @map("deal_id") @db.Uuid
+  mediaAssetId String  @map("media_asset_id") @db.Uuid
+  sortOrder    Int     @default(0) @map("sort_order") @db.SmallInt
+  isPrimary    Boolean @default(false) @map("is_primary")
+
+  deal       Deal       @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@id([dealId, mediaAssetId])
+  @@unique([dealId, sortOrder])
+  @@index([mediaAssetId])
+  @@map("deal_images")
+}
+
+model Favourite {
+  userId    String   @map("user_id") @db.Uuid
+  dealId    String   @map("deal_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Restrict)
+
+  @@id([userId, dealId])
+  @@index([dealId, createdAt])
+  @@map("favourites")
+}
+
+model FollowedStore {
+  userId    String   @map("user_id") @db.Uuid
+  storeId   String   @map("store_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  @@id([userId, storeId])
+  @@index([storeId, createdAt])
+  @@map("followed_stores")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  kind      String    @db.VarChar(64)
+  title     String    @db.VarChar(180)
+  body      String    @db.VarChar(500)
+  href      String?   @db.VarChar(500)
+  storeId   String?   @map("store_id") @db.Uuid
+  dealId    String?   @map("deal_id") @db.Uuid
+  dedupeKey String?   @map("dedupe_key") @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+
+  user  User   @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  deal  Deal?  @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model RedemptionCode {
+  id             String               @id @default(uuid()) @db.Uuid
+  dealId         String               @map("deal_id") @db.Uuid
+  customerUserId String               @map("customer_user_id") @db.Uuid
+  tokenHash      Bytes                @unique @map("token_hash") @db.ByteA
+  status         RedemptionCodeStatus @default(ISSUED)
+  issuedAt       DateTime             @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt      DateTime             @map("expires_at") @db.Timestamptz(6)
+  redeemedAt     DateTime?            @map("redeemed_at") @db.Timestamptz(6)
+
+  deal       Deal        @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  customer   User        @relation("CodeCustomer", fields: [customerUserId], references: [id], onDelete: Restrict)
+  redemption Redemption?
+
+  @@unique([id, dealId, customerUserId])
+  @@index([dealId, status, expiresAt])
+  @@index([customerUserId, issuedAt])
+  @@map("redemption_codes")
+}
+
+model Redemption {
+  id                       String   @id @default(uuid()) @db.Uuid
+  codeId                   String   @map("code_id") @db.Uuid
+  dealId                   String   @map("deal_id") @db.Uuid
+  storeId                  String   @map("store_id") @db.Uuid
+  customerUserId           String   @map("customer_user_id") @db.Uuid
+  redeemedByUserId         String   @map("redeemed_by_user_id") @db.Uuid
+  customerRedemptionNumber Int      @default(1) @map("customer_redemption_number")
+  idempotencyKey           String   @map("idempotency_key") @db.VarChar(128)
+  requestId                String?  @map("request_id") @db.Uuid
+  redeemedAt               DateTime @default(now()) @map("redeemed_at") @db.Timestamptz(6)
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  code       RedemptionCode @relation(fields: [codeId, dealId, customerUserId], references: [id, dealId, customerUserId], onDelete: Restrict)
+  deal       Deal           @relation(fields: [dealId, storeId], references: [id, storeId], onDelete: Restrict)
+  store      Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  customer   User           @relation("RedemptionCustomer", fields: [customerUserId], references: [id], onDelete: Restrict)
+  redeemedBy User           @relation("RedemptionStaff", fields: [redeemedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([dealId, customerUserId, customerRedemptionNumber])
+  @@unique([codeId, dealId, customerUserId])
+  @@unique([storeId, idempotencyKey])
+  @@index([storeId, redeemedAt])
+  @@index([dealId, redeemedAt])
+  @@index([customerUserId, redeemedAt])
+  @@map("redemptions")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  actorType      String   @map("actor_type") @db.VarChar(32)
+  action         String   @db.VarChar(100)
+  entityType     String   @map("entity_type") @db.VarChar(80)
+  entityId       String?  @map("entity_id") @db.Uuid
+  retailerId     String?  @map("retailer_id") @db.Uuid
+  requestId      String?  @map("request_id") @db.Uuid
+  beforeSnapshot Json?    @map("before_snapshot") @db.JsonB
+  afterSnapshot  Json?    @map("after_snapshot") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor    User?     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  retailer Retailer? @relation(fields: [retailerId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([retailerId, createdAt])
+  @@map("audit_logs")
+}

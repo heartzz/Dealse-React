@@ -1,0 +1,36 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.turbo/
+
+# Build output
+dist/
+build/
+.next/
+coverage/
+*.tsbuildinfo
+apps/web/playwright-report/
+apps/web/test-results/
+
+# Expo / React Native
+.expo/
+web-build/
+android/.gradle/
+ios/Pods/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local package cache
+**/.npm-cache/
+apps/api/src/generated/prisma/
+**/.local-media/
