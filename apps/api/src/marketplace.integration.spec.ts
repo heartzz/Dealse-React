@@ -40,6 +40,7 @@ let nearbyStoreId = "";
 let categoryId = "";
 let productId = "";
 let draftId = "";
+let nullableDraftId = "";
 let publishedId = "";
 let highDiscountId = "";
 let nearestDealId = "";
@@ -66,7 +67,7 @@ before(async () => {
 after(async () => {
   if (retailerIds.length) {
     await prisma.$transaction(async (tx) => {
-      const dealIds = [draftId, publishedId, highDiscountId, nearestDealId, hiddenId, expiredId].filter(Boolean);
+      const dealIds = [draftId, nullableDraftId, publishedId, highDiscountId, nearestDealId, hiddenId, expiredId].filter(Boolean);
       await tx.dealReport.deleteMany({ where: { OR: [{ id: { in: reportIds } }, { reporterUserId: { in: users } }, { reviewedByUserId: { in: users } }] } });
       await tx.notification.deleteMany({ where: { userId: { in: users } } });
       await tx.followedStore.deleteMany({ where: { userId: { in: users } } });
@@ -125,6 +126,28 @@ test("3. retailer saves a draft deal", async () => {
   const updated = await dealsService.update(retailerUser, retailerId, deal.id, { summary: "Updated integration offer" });
   assert.equal(updated.summary, "Updated integration offer");
   assert.equal((await dealsService.listMine(retailerUser, retailerId)).some((item) => item.id === deal.id), true);
+});
+
+test("optional nullable deal text survives draft save, reopen preview, and edit", async () => {
+  const now = Date.now();
+  const draft = await dealsService.create(retailerUser, retailerId, {
+    title: `Optional fields ${suffix.slice(0, 8)}`, terms: "Draft terms can be completed later.",
+    storeId, categoryId, offerType: "PERCENTAGE" as never, discountBps: 2000,
+    startsAt: new Date(now - 60_000).toISOString(), endsAt: new Date(now + 86_400_000).toISOString(),
+  });
+  nullableDraftId = draft.id;
+  assert.equal(draft.summary, null);
+  assert.equal(draft.description, null);
+
+  const reopened = await dealsService.preview(retailerUser, retailerId, draft.id);
+  assert.equal(reopened.summary, null);
+  assert.equal(reopened.description, null);
+
+  const updated = await dealsService.update(retailerUser, retailerId, draft.id, {
+    summary: null, details: null, imageReference: null,
+  });
+  assert.equal(updated.summary, null);
+  assert.equal(updated.description, null);
 });
 
 test("4. only an approved retailer and verified store can publish discoverable offers", async () => {

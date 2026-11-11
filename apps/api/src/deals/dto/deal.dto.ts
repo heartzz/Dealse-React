@@ -25,8 +25,8 @@ export class CreateDealDto {
 
 export class UpdateDealDto {
   @IsOptional() @Transform(trimmed) @IsString() @Length(2, 180) title?: string;
-  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 320) summary?: string;
-  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 10000) details?: string;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 320) summary?: string | null;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 10000) details?: string | null;
   @IsOptional() @Transform(trimmed) @IsString() @Length(1, 10000) terms?: string;
   @IsOptional() @IsUUID() categoryId?: string;
   @IsOptional() @IsEnum(OfferType) offerType?: OfferType;

@@ -69,8 +69,9 @@ export default async function RetailerDashboardPage() {
 
   const workspaceDeals = deals.map((deal) => ({
     ...toMarketplaceCard(deal), title: deal.title, description: deal.description || deal.summary || deal.title,
+    summary: deal.summary || "", details: deal.description || "",
     startDate: deal.startsAt.slice(0, 10), endDate: deal.endsAt.slice(0, 10), image: toMarketplaceCard(deal).image,
-    imageAlt: deal.imageAlt, categoryId: deal.categoryId || "", offerType: deal.offerType, discountBps: deal.discountBps || 2000,
+    imageAlt: deal.imageAlt, imageReference: deal.image?.startsWith("/media/") ? "" : deal.image || "", categoryId: deal.categoryId || "", offerType: deal.offerType, discountBps: deal.discountBps || 2000,
     status: deal.status, terms: deal.terms,
   }));
   return <App mode="retailer" initialUser={user} initialRetailer={workspace} initialStores={stores} initialProducts={products} initialRetailerDeals={workspaceDeals} initialCategories={categories} initialNotificationCount={notificationCount} onCreateStore={createStore} onUpdateStore={updateStore} onCreateProduct={createProduct} onUpdateProduct={updateProduct} onArchiveProduct={archiveProduct} onCreateDeal={createDeal} onUpdateDeal={updateDeal} onPublishDeal={publishDeal} onPauseDeal={pauseDeal} onPreviewDeal={previewDeal} onRetailerLogout={logoutRetailer} />;

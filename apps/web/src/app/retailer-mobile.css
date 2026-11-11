@@ -68,10 +68,10 @@
   .retailer-workspace .workspace-field input,.retailer-workspace .workspace-field select,.retailer-workspace .workspace-field textarea{min-height:48px;padding:11px 12px;border-radius:8px;font-size:16px}
   .retailer-workspace .workspace-field textarea{min-height:92px}
   .retailer-workspace .deal-wizard-progress{gap:2px;margin-inline:-4px;padding:14px 0}
-  .retailer-workspace .deal-wizard-progress button{justify-content:center;gap:5px}
+  .retailer-workspace .deal-wizard-progress button{min-width:0;flex-direction:column;justify-content:flex-start;gap:4px;text-align:center}
   .retailer-workspace .deal-wizard-progress button:not(:last-child)::after{left:calc(50% + 14px);right:calc(-50% + 14px);top:14px}
   .retailer-workspace .deal-wizard-progress button>span{width:28px;height:28px;font-size:10px}
-  .retailer-workspace .deal-wizard-progress button small{max-width:64px;font-size:9px;text-align:center}
+  .retailer-workspace .deal-wizard-progress button small{display:block;max-width:100%;font-size:9px;line-height:1.15;text-align:center;overflow-wrap:anywhere}
   .retailer-workspace .deal-wizard-step{min-height:0}
   .retailer-workspace .deal-wizard-footer{position:sticky;bottom:calc(66px + env(safe-area-inset-bottom));flex-wrap:wrap;gap:8px;margin:0 -16px -16px;padding:11px 14px;border-radius:0 0 12px 12px}
   .retailer-workspace .deal-wizard-footer .workspace-form-actions-spacer{display:none}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import RetailerImagePicker from "../../apps/web/src/components/RetailerImagePicker.jsx";
 import { PublicMediaGallery } from "../../apps/web/src/components/PublicMediaGallery";
+import { normalizeOptionalOfferFields, optionalOfferPayload } from "./retailer-offer-form.js";
 import {
   ArrowRight, BookOpen, BookmarkSimple, CalendarBlank, CaretDown, Check, Coffee, Compass, Heart, House,
   Leaf, MapPin, MagnifyingGlass, ShoppingBag, Storefront, TShirt, UserCircle,
@@ -218,14 +219,14 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
   const removeProduct = (product) => run(async () => { await onArchiveProduct(retailerId, product.id); setProducts((previous) => previous.filter((item) => item.id !== product.id)); }, "Product archived.");
   const formDate = (date, end = false) => `${date}T${end ? "23:59:59" : "00:00:00"}+05:30`;
   const dealInput = () => ({
-    title: dealForm.title.trim(), summary: dealForm.summary.trim() || undefined, details: dealForm.details.trim() || undefined,
+    title: dealForm.title.trim(), ...optionalOfferPayload(dealForm, { editing: Boolean(editingDeal) }),
     terms: dealForm.terms.trim(), storeId: dealForm.storeId, categoryId: dealForm.categoryId,
     offerType: dealForm.offerType,
     ...(dealForm.offerType === "PERCENTAGE" ? { discountBps: Math.round(Number(dealForm.discount) * 100) } : {}),
     ...(dealForm.offerType === "FIXED_AMOUNT" ? { discountAmountMinor: Math.round(Number(dealForm.discountAmount) * 100), currency: "INR" } : {}),
     ...(dealForm.originalPrice && dealForm.offerPrice ? { originalPriceMinor: Math.round(Number(dealForm.originalPrice) * 100), offerPriceMinor: Math.round(Number(dealForm.offerPrice) * 100) } : {}),
     startsAt: formDate(dealForm.startsAt), endsAt: formDate(dealForm.endsAt, true),
-    imageReference: dealForm.imageReference.trim() || undefined, productIds: dealForm.productIds,
+    productIds: dealForm.productIds,
   });
   const saveDeal = (event) => {
     event?.preventDefault();
@@ -239,11 +240,11 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
   };
   const persistDeal = async (input) => {
       const result = editingDeal ? await onUpdateDeal(retailerId, editingDeal.id, input) : await onCreateDeal(retailerId, input);
-      const normalized = { ...result, offer: result.offer || `${(result.discountBps || 0) / 100}% off`, description: result.summary || result.description || result.title, startDate: result.startsAt.slice(0, 10), endDate: result.endsAt.slice(0, 10), image: result.image || suggestedOfferImage(categoryName(result.categoryId), result.title).src, category: result.category?.name || categoryName(result.categoryId), storeName: result.store?.name || currentStore?.name || store?.storeName, status: result.status };
+      const normalized = { ...result, imageReference: result.imageReference ?? input.imageReference, offer: result.offer || `${(result.discountBps || 0) / 100}% off`, description: result.summary || result.description || result.title, startDate: result.startsAt.slice(0, 10), endDate: result.endsAt.slice(0, 10), image: result.image || suggestedOfferImage(categoryName(result.categoryId), result.title).src, category: result.category?.name || categoryName(result.categoryId), storeName: result.store?.name || currentStore?.name || store?.storeName, status: result.status };
       setOffers((previous) => editingDeal ? previous.map((item) => item.id === result.id ? normalized : item) : [normalized, ...previous]);
       setDealImage(normalized.image?.startsWith("/media/") ? normalized.image : "");
       setDealImages(normalized.images || []);
-      setEditingDeal(normalized); setDealForm((previous) => ({ ...previous, ...normalized, offerType: String(normalized.offerType || "PERCENTAGE").toUpperCase(), startsAt: normalized.startDate, endsAt: normalized.endDate, storeId: normalized.storeId || currentStore?.id, categoryId: normalized.categoryId || "", discount: String((normalized.discountBps || 2000) / 100), originalPrice: normalized.originalPriceMinor ? String(Number(normalized.originalPriceMinor) / 100) : "", offerPrice: normalized.offerPriceMinor ? String(Number(normalized.offerPriceMinor) / 100) : "" }));
+      setEditingDeal(normalized); setDealForm((previous) => ({ ...previous, ...normalized, ...normalizeOptionalOfferFields(normalized), offerType: String(normalized.offerType || "PERCENTAGE").toUpperCase(), startsAt: normalized.startDate, endsAt: normalized.endDate, storeId: normalized.storeId || currentStore?.id, categoryId: normalized.categoryId || "", discount: String((normalized.discountBps || 2000) / 100), originalPrice: normalized.originalPriceMinor ? String(Number(normalized.originalPriceMinor) / 100) : "", offerPrice: normalized.offerPriceMinor ? String(Number(normalized.offerPriceMinor) / 100) : "" }));
       return result;
   };
   const saveDealDraft = () => {
@@ -310,7 +311,7 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
     setDealImage(deal.image?.startsWith("/media/") ? deal.image : "");
     setDealImages(deal.images || []);
     setDealStep(1);
-    setDealForm({ ...blankDeal, ...deal, offerType: String(deal.offerType || "PERCENTAGE").toUpperCase(), storeId: deal.store?.id || deal.storeId || currentStore?.id, categoryId: deal.categoryId || "", startsAt: deal.startsAt?.slice(0, 10) || deal.startDate, endsAt: deal.endsAt?.slice(0, 10) || deal.endDate, discount: String((deal.discountBps || 2000) / 100), originalPrice: deal.originalPriceMinor ? String(Number(deal.originalPriceMinor) / 100) : "", offerPrice: deal.offerPriceMinor ? String(Number(deal.offerPriceMinor) / 100) : "", productIds: deal.products?.map((product) => product.id) || [] });
+    setDealForm({ ...blankDeal, ...deal, ...normalizeOptionalOfferFields(deal), offerType: String(deal.offerType || "PERCENTAGE").toUpperCase(), storeId: deal.store?.id || deal.storeId || currentStore?.id, categoryId: deal.categoryId || "", startsAt: deal.startsAt?.slice(0, 10) || deal.startDate, endsAt: deal.endsAt?.slice(0, 10) || deal.endDate, discount: String((deal.discountBps || 2000) / 100), originalPrice: deal.originalPriceMinor ? String(Number(deal.originalPriceMinor) / 100) : "", offerPrice: deal.offerPriceMinor ? String(Number(deal.offerPriceMinor) / 100) : "", productIds: deal.products?.map((product) => product.id) || [] });
     setSection("offers");
   };
   const publish = (deal) => run(async () => { const result = await onPublishDeal(retailerId, deal.id); setOffers((previous) => previous.map((item) => item.id === deal.id ? { ...item, status: result.status } : item)); setEditingDeal((previous) => previous?.id === deal.id ? { ...previous, status: result.status } : previous); }, "Offer published.");
