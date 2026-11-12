@@ -39,6 +39,22 @@ export async function toggleFavourite(dealId: string, saved: boolean) {
   return result;
 }
 
+export async function toggleFollowedStore(storeId: string, following: boolean) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(storeId)) {
+    throw new Error("This store could not be found. Please refresh and try again.");
+  }
+  const token = await accessToken();
+  const result = await callDealseApi<{ following: boolean }>(
+    `/customers/me/followed-stores/${storeId}`,
+    token,
+    { method: following ? "DELETE" : "POST" },
+  );
+  revalidatePath(`/stores/${storeId}`);
+  revalidatePath("/customer/dashboard");
+  revalidatePath("/customer/notifications");
+  return result;
+}
+
 export async function reportDeal(dealId: string, reason: string, details: string) {
   const token = await accessToken();
   const result = await callDealseApi(`/deals/${encodeURIComponent(dealId)}/reports`, token, {

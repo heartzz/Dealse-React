@@ -14,6 +14,7 @@ import "./notification-inbox.css";
 export const metadata: Metadata = {
   title: "DealSe",
   description: "Discover good local offers, stores, and finds around Ahmedabad.",
+  icons: { icon: "/assets/dealse-logo.png" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

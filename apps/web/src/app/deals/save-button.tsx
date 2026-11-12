@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toggleFavourite } from "../marketplace-actions";
 
 export function DealSaveButton({ dealId, initiallySaved, customerSignedIn }: { dealId: string; initiallySaved: boolean; customerSignedIn: boolean }) {
+  const router = useRouter();
   const [saved, setSaved] = useState(initiallySaved);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
   async function toggle() {
     if (!customerSignedIn) {
-      window.location.assign("/customer/login");
+      router.push("/customer/login");
       return;
     }
     if (busy) return;

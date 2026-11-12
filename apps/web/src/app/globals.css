@@ -93,5 +93,19 @@ a { color: inherit; }
 .customer-profile-edit input { min-width: 0; min-height: 3rem; flex: 1 1 14rem; padding: 0.7rem 0.8rem; border: 1px solid #d0d5dd; border-radius: 0.65rem; background: #fff; color: #18212b; font: inherit; font-weight: 400; }
 .customer-profile-edit button { min-width: 8rem; padding-inline: 1rem; }
 .logout-button { padding: 0.6rem 0.85rem; border: 1px solid #d0d5dd; border-radius: 0.6rem; background: white; color: #344054; font: inherit; cursor: pointer; }
+.dashboard-header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.75rem; }
+.notifications-entry { display: inline-flex; align-items: center; gap: 0.5rem; color: #087c75; font-weight: 700; text-decoration: none; }
+.notifications-entry > span { display: inline-grid; min-width: 1.4rem; height: 1.4rem; place-items: center; padding-inline: 0.3rem; border-radius: 999px; background: #df2d70; color: white; font-size: 0.72rem; line-height: 1; }
+.dashboard-inline-error { color: #9f2d25; line-height: 1.5; }
+.dashboard-inline-error a { color: inherit; font-weight: 700; }
+.following-stores-panel { margin-top: 1.25rem; }
+.following-stores-panel h2 { margin: 0 0 1rem; font-size: 1.3rem; }
+.followed-stores-list { display: grid; gap: 0.65rem; }
+.followed-stores-list article { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem; border: 1px solid #e8ecef; border-radius: 0.85rem; }
+.followed-stores-list article > div { min-width: 0; }
+.followed-stores-list h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.followed-stores-list h3 a { color: #202a33; text-decoration: none; }
+.followed-stores-list p { margin: 0.3rem 0 0; color: #667085; font-size: 0.9rem; }
+.followed-store-open { flex: 0 0 auto; color: #087c75; font-weight: 700; text-decoration: none; }
 @media (max-width: 600px) { .saved-deal-row { grid-template-columns: 5rem minmax(0, 1fr); } .saved-deal-row > img { width: 5rem; height: 4.75rem; } .saved-deal-row > a { grid-column: 2; } }
-@media (max-width: 480px) { .auth-shell { padding: 1rem; } .auth-brand { margin-bottom: 1.5rem; } .dashboard-header { align-items: flex-start; } }
+@media (max-width: 480px) { .auth-shell { padding: 1rem; } .auth-brand { margin-bottom: 1.5rem; } .dashboard-header { align-items: flex-start; gap: 0.75rem; } .dashboard-header-actions { gap: 0.55rem; } .notifications-entry { font-size: 0.9rem; } .followed-stores-list article { align-items: flex-start; flex-direction: column; gap: 0.65rem; } }

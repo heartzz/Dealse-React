@@ -5,6 +5,8 @@ import { callDealseApi, DealseApiError, type DealSePublicStore } from "../../../
 import { toMarketplaceCard } from "../../../../lib/marketplace-presenter";
 import { PublicMediaGallery } from "../../../../components/PublicMediaGallery";
 import { imageByCategory } from "../../../../lib/marketplace-presenter";
+import { createSupabaseServerClient } from "../../../../lib/supabase/server";
+import { FollowStoreButton } from "../../follow-store-button";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,28 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 
 async function readStore(storeId: string): Promise<DealSePublicStore> {
   return callDealseApi<DealSePublicStore>(`/stores/${encodeURIComponent(storeId)}`);
+}
+
+async function customerFollowState(storeId: string): Promise<{ signedIn: boolean; following: boolean }> {
+  let accessToken: string;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: claims, error } = await supabase.auth.getClaims();
+    if (error || !claims?.claims.sub) return { signedIn: false, following: false };
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return { signedIn: false, following: false };
+    accessToken = session.access_token;
+  } catch {
+    return { signedIn: false, following: false };
+  }
+  try {
+    const user = await callDealseApi<{ roles: string[] }>("/auth/me", accessToken);
+    if (!user.roles.includes("customer")) return { signedIn: false, following: false };
+    const stores = await callDealseApi<Array<{ id: string }>>("/customers/me/followed-stores", accessToken);
+    return { signedIn: true, following: stores.some((store) => store.id === storeId) };
+  } catch {
+    return { signedIn: true, following: false };
+  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ storeId: string; slug: string }> }): Promise<Metadata> {
@@ -69,6 +93,7 @@ export default async function PublicStorePage({ params }: { params: Promise<{ st
   if (slug !== store.slug) redirect(`/stores/${store.id}/${store.slug}`);
 
   const deals = store.offers.map(toMarketplaceCard);
+  const followState = await customerFollowState(store.id);
   const cover = safeImage(store, deals);
   const address = [store.addressLine1, store.addressLine2, store.locality, store.city, store.region, store.postalCode].filter(Boolean).join(", ");
 
@@ -89,6 +114,7 @@ export default async function PublicStorePage({ params }: { params: Promise<{ st
               {store.phone ? <p><span aria-hidden="true">☎</span><a href={`tel:${store.phone}`}>{store.phone}</a></p> : null}
               {store.email ? <p><span aria-hidden="true">✉</span><a href={`mailto:${store.email}`}>{store.email}</a></p> : null}
             </div>
+            <FollowStoreButton storeId={store.id} initiallyFollowing={followState.following} customerSignedIn={followState.signedIn} />
           </div>
         </section>
 

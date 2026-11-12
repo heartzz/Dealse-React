@@ -20,6 +20,11 @@ test("retailer offer draft round-trip, image selection, preview, and publish fit
       return { x, y, right, bottom };
     }));
     expect(bounds).toHaveLength(5);
+    await expect.poll(() => progress.evaluate((element) => getComputedStyle(element).borderBottomWidth), {
+      message: `stepper should not draw a full-width bottom separator at ${width}px`,
+    }).toBe("0px");
+    await expect.poll(() => progress.locator("button").first().evaluate((button) => getComputedStyle(button, "::after").height)).toBe("1px");
+    await expect(progress.locator("button > span")).toHaveCount(5);
     for (let index = 0; index < bounds.length - 1; index += 1) {
       expect(bounds[index].right, `wizard steps overlap horizontally at ${width}px`).toBeLessThanOrEqual(bounds[index + 1].x + 1);
     }

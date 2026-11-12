@@ -24,13 +24,14 @@ export function NotificationInbox({
             <p className="eyebrow">{surface === "customer" ? "YOUR DEALS" : "STORE WORKSPACE"}</p>
             <h1 id="notification-title">Notifications</h1>
             <p>Updates about your DealSe activity.</p>
+            {result ? <p className="notification-unread-count" role="status">{result.unreadCount} unread</p> : null}
           </div>
           {result?.unreadCount ? <form action={markAllNotificationsRead.bind(null, surface)}>
             <button className="notification-mark-all" type="submit">Mark all as read</button>
           </form> : null}
         </div>
 
-        {error && <p className="notification-message notification-message--error" role="alert">Notifications could not be loaded or updated. Please refresh and try again.</p>}
+        {error && <div className="notification-message notification-message--error" role="alert"><p>Notifications could not be loaded or updated.</p><Link href={`/${surface}/notifications`}>Try again</Link></div>}
         {!error && items.length === 0 && <div className="notification-empty"><span aria-hidden="true">✓</span><h2>You’re all caught up</h2><p>New offer and store updates will appear here.</p></div>}
         {items.length > 0 && <ul className="notification-list">
           {items.map((item) => {

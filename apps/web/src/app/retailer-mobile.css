@@ -1,4 +1,4 @@
-.retailer-workspace .deal-wizard-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0 0 10px;padding:15px 0 17px;border-bottom:1px solid #edf1f0}
+.retailer-workspace .deal-wizard-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0 0 10px;padding:15px 0 17px}
 .retailer-workspace .deal-wizard-progress button{position:relative;display:flex;align-items:center;gap:8px;padding:0;border:0;background:none;color:#758580;text-align:left;cursor:pointer}
 .retailer-workspace .deal-wizard-progress button:not(:last-child)::after{position:absolute;top:15px;left:33px;right:5px;height:1px;background:#e0e9e6;content:""}
 .retailer-workspace .deal-wizard-progress button>span{z-index:1;width:30px;height:30px;flex:none;display:grid;place-items:center;border:1px solid #dce8e4;border-radius:50%;background:#fff;color:#768580;font-size:11px;font-weight:700}
@@ -21,6 +21,9 @@
 .retailer-workspace .workspace-product-search input:focus-visible{outline:0}
 .retailer-workspace .workspace-account-signout{min-height:40px;margin-top:18px;padding:0 14px;border:1px solid #dce9e5;border-radius:7px;background:#fff;color:#00796b;font-size:12px;font-weight:700;cursor:pointer}
 .retailer-workspace .workspace-mobile-nav{display:none}
+.retailer-workspace--setup{grid-template-columns:minmax(0,1fr)}
+.retailer-workspace--setup .workspace-content{width:min(100%,790px)}
+.retailer-workspace--setup .workspace-form-panel{width:100%;max-width:720px}
 @media(max-width:700px){
   .site-shell.retailer-view:has(.retailer-workspace){overflow:visible}
   .retailer-workspace{display:flex;min-height:100dvh;flex-direction:column;padding-bottom:calc(76px + env(safe-area-inset-bottom));}

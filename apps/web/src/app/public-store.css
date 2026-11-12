@@ -6,6 +6,7 @@
 .store-profile-image>.public-media-gallery{position:absolute;inset:0}
 .public-media-gallery--store .public-media-gallery-main>img{object-fit:cover}
 .public-media-gallery--store .public-media-gallery-thumbnails{height:59px}
+.store-follow-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:22px}.store-follow-button{min-height:44px;padding:10px 17px;border:1px solid #df2d70;border-radius:999px;background:#df2d70;color:#fff;font:inherit;font-size:14px;font-weight:800;cursor:pointer}.store-follow-button.is-following{background:#fff;color:#bd245d}.store-follow-button:disabled{opacity:.65;cursor:wait}.store-follow-wrap p{flex:1 1 100%;margin:0;color:#68737d;font-size:13px;line-height:1.5}
 
 
 .store-profile-image{position:relative;overflow:hidden}

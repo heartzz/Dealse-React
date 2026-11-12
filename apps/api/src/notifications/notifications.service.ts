@@ -20,13 +20,15 @@ export class NotificationsService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async list(user: AuthPrincipal, page: number, limit: number) {
+    const parsedPage = Number(page);
+    const parsedLimit = Number(limit);
     const where = { userId: user.userId };
     const [records, total, unreadCount] = await this.prisma.$transaction([
       this.prisma.notification.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (parsedPage - 1) * parsedLimit,
+        take: parsedLimit,
         select: { id: true, kind: true, title: true, body: true, href: true, storeId: true, dealId: true, createdAt: true, readAt: true },
       }),
       this.prisma.notification.count({ where }),
@@ -34,10 +36,10 @@ export class NotificationsService {
     ]);
     return {
       items: records.map((record) => ({ ...record, createdAt: record.createdAt.toISOString(), readAt: record.readAt?.toISOString() ?? null, isRead: record.readAt !== null })),
-      page,
-      limit,
+      page: parsedPage,
+      limit: parsedLimit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / parsedLimit),
       unreadCount,
     };
   }

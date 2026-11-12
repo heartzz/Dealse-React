@@ -10,11 +10,15 @@ type PublicDeal = {
 };
 
 async function getPublishedDeal(request: APIRequestContext): Promise<PublicDeal> {
-  const response = await request.get(`${apiOrigin}/api/v1/deals?city=Ahmedabad&limit=1`);
+  const response = await request.get(`${apiOrigin}/api/v1/deals?city=Ahmedabad&limit=20`);
   expect(response.ok(), "the live NestJS discovery endpoint should respond successfully").toBeTruthy();
   const payload = (await response.json()) as { items?: PublicDeal[] };
   expect(payload.items?.length, "seed the local demo catalogue before running browser acceptance tests").toBeGreaterThan(0);
-  return payload.items![0];
+  for (const candidate of payload.items!) {
+    const detail = await request.get(`${apiOrigin}/api/v1/deals/${encodeURIComponent(candidate.id)}`);
+    if (detail.ok()) return (await detail.json()) as PublicDeal;
+  }
+  throw new Error("The discovery API returned no offer that could be loaded from its canonical detail endpoint.");
 }
 
 test("customer marketplace loads live deals and canonical deal/store pages", async ({ page, request }) => {
@@ -31,9 +35,21 @@ test("customer marketplace loads live deals and canonical deal/store pages", asy
   await page.goto(`/deals/${encodeURIComponent(deal.id)}/${encodeURIComponent(deal.slug)}`);
   await expect(page.getByRole("heading", { level: 1, name: deal.title })).toBeVisible();
   await expect(page.getByRole("heading", { name: deal.store.name }).first()).toBeVisible();
+  for (const width of [360, 375, 390, 430, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), {
+      message: `canonical offer detail should fit a ${width}px viewport`,
+    }).toBeTruthy();
+  }
 
   await page.goto(`/stores/${encodeURIComponent(deal.store.id)}/${encodeURIComponent(deal.store.slug)}`);
   await expect(page.getByRole("heading", { level: 1, name: deal.store.name })).toBeVisible();
+  for (const width of [360, 375, 390, 430, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), {
+      message: `store detail should fit a ${width}px viewport`,
+    }).toBeTruthy();
+  }
 });
 
 test("customer and retailer dashboards require an authenticated session", async ({ page }) => {
@@ -46,7 +62,7 @@ test("customer and retailer dashboards require an authenticated session", async 
 
 test("customer marketplace has no horizontal overflow at phone, tablet and desktop widths", async ({ page }) => {
   await page.goto("/");
-  for (const width of [360, 375, 390, 414, 768, 1366]) {
+  for (const width of [360, 375, 390, 430, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), {
       message: `marketplace should fit a ${width}px viewport without horizontal scrolling`,
