@@ -23,7 +23,7 @@ const productsService = new ProductsService(prisma);
 const notificationsService = new NotificationsService(prisma);
 const dealsService = new DealsService(prisma, notificationsService);
 const favouritesService = new FavouritesService(prisma);
-const adminService = new AdminService(prisma);
+const adminService = new AdminService(prisma, dealsService);
 const dealReportsService = new DealReportsService(prisma);
 const suffix = randomUUID();
 const users: string[] = [];
@@ -389,4 +389,32 @@ test("12. paused offers are removed from public discovery", async () => {
   assert.equal((await dealsService.publish(retailerUser, retailerId, publishedId)).status, "published");
   assert.deepEqual(await dealsService.pause(retailerUser, retailerId, publishedId), { id: publishedId, status: "paused" });
   assert.equal((await notificationsService.list(retailerUser, 1, 100)).items.filter((item) => item.kind === "RETAILER_PUBLISH_CONFIRMATION" && item.dealId === publishedId).length, noticesBeforePauseFlow + 1, "republishing a moderated draft confirms the new publish event once");
+});
+
+test("admin suspension reasons are required and retailer/store suspension blocks publishing", async () => {
+  await assert.rejects(adminService.suspendRetailer(admin, retailerId, "  "), (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && error.getStatus() === 400);
+  await assert.rejects(adminService.suspendStore(admin, storeId, "  "), (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && error.getStatus() === 400);
+
+  await prisma.deal.update({ where: { id: publishedId }, data: { status: DealStatus.DRAFT } });
+  await adminService.suspendStore(admin, storeId, "Store documents require review.");
+  await assert.rejects(dealsService.publish(retailerUser, retailerId, publishedId), (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && [403, 409].includes(error.getStatus()));
+  assert.ok(await prisma.auditLog.findFirst({ where: { actorUserId: admin.userId, action: "store.suspended", entityId: storeId } }));
+  await adminService.resumeStore(admin, storeId);
+
+  await adminService.suspendRetailer(admin, retailerId, "Retailer compliance review required.");
+  await assert.rejects(dealsService.publish(retailerUser, retailerId, publishedId), (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && [403, 409].includes(error.getStatus()));
+  assert.ok(await prisma.auditLog.findFirst({ where: { actorUserId: admin.userId, action: "retailer.suspended", entityId: retailerId } }));
+  const reactivated = await adminService.reactivateRetailer(admin, retailerId);
+  assert.equal(reactivated.status, "ACTIVE", "reactivation preserves the active store only when verification data remains valid");
+});
+
+test("rejection is audited, blocks retailer publishing, and admin publish reuses eligibility rules", async () => {
+  await assert.rejects(adminService.rejectDeal(admin, nullableDraftId, " "), (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && error.getStatus() === 400);
+  await adminService.rejectDeal(admin, nullableDraftId, "Missing required offer details.");
+  await assert.rejects(dealsService.publish(retailerUser, retailerId, nullableDraftId), (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && error.getStatus() === 409);
+  assert.ok(await prisma.auditLog.findFirst({ where: { actorUserId: admin.userId, action: "deal.rejected", entityId: nullableDraftId } }));
+  await dealsService.update(retailerUser, retailerId, nullableDraftId, { title: `Corrected offer ${suffix.slice(0, 8)}` });
+  const approved = await adminService.approveDeal(admin, nullableDraftId);
+  assert.equal(approved.status, DealStatus.PUBLISHED);
+  assert.ok(await prisma.auditLog.findFirst({ where: { actorUserId: admin.userId, action: "deal.approved_and_published", entityId: nullableDraftId } }));
 });

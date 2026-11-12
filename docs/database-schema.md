@@ -2,6 +2,8 @@
 
 **Status:** Four additive Prisma migrations are applied to the existing local PostgreSQL 18 + PostGIS `dealse_dev` database, including admin/moderation support (verified 2026-11-10). No database was recreated; production was not changed.
 
+**Admin Backoffice V1 foundation:** An additional additive Prisma migration introduces administrator accounts, permission grants, invitation records, a one-time bootstrap marker and admin role/permission context on audit rows. This migration is separate from the four previously applied migrations; it does not change marketplace tables or status enums. Apply locally only after reviewing the migration with `pnpm --filter @dealse/api db:migrate:dev`. The API also requires Supabase AAL2 and explicit permissions. See [ADR 0005](adr/0005-admin-backoffice-foundation.md).
+
 ## Implemented P0 schema
 
 The Prisma schema and migrations are in `apps/api/prisma/`. They include users/profiles/account roles, retailer memberships, verified stores, categories, simple products, media metadata and image links, deals/moderation holds, customer deal reports, deal-product links, favourites, followed stores, audit logs, and online single-use redemption codes/redemptions. The initial migration enables PostGIS and creates a GiST index for store geography; the auth migration adds `user_account_roles` and backfills existing users as customers without dropping data.
@@ -155,3 +157,5 @@ The D1 SQL in `prototype/migrations/0001_backend_foundation.sql` is historical p
 ### Applied admin/moderation migration
 
 `20261110130000_admin_moderation_reports` adds the `admin` account-role enum value, moderation-hold fields on `deals`, and `deal_reports` with report lifecycle and reviewer foreign keys. It is additive and does not alter existing records. The local `dealse_dev` database has this migration applied; production has not. Since PostgreSQL enum values cannot be removed in place, rollback after role use should be forward-only or use a reviewed type rebuild.
+
+`20261112140000_admin_backoffice_foundation` adds administrator accounts, permission grants, invitations, bootstrap state, and audit actor context. `20261112160000_moderation_rejected_states` adds the `rejected` status value to retailer, store, and deal enums so rejection remains distinct from pause, suspension, closure, and expiry. Both migrations are additive and applied only to local `dealse_dev`; production has not been changed. Rejection reasons and state snapshots use the existing audit log JSON fields.

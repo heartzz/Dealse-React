@@ -3,5 +3,5 @@ import { MediaController } from "./media.controller.js";
 import { MediaService } from "./media.service.js";
 import { MediaStorageService } from "./media-storage.service.js";
 
-@Module({ controllers: [MediaController], providers: [MediaService, MediaStorageService] })
+@Module({ controllers: [MediaController], providers: [MediaService, MediaStorageService], exports: [MediaService] })
 export class MediaModule {}

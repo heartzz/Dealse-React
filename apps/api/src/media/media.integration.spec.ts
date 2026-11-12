@@ -112,6 +112,9 @@ test("media uploads validate, retry safely, persist store/product/deal galleries
   const privateImage = await media.readContent(uploaded.id, owner);
   assert.equal(privateImage.mimeType, "image/webp");
   assert.ok(privateImage.bytes.length > 0);
+  const adminStoreImage = await media.readAdminContent(uploaded.id, "store", storeId);
+  assert.equal(adminStoreImage.mimeType, "image/webp", "admin review can read a private store image by its exact parent record");
+  await assert.rejects(() => media.readAdminContent(uploaded.id, "store", otherStoreId), "admin media reads remain scoped to the associated store");
   await assert.rejects(() => media.readContent(uploaded.id));
   await assert.rejects(() => media.readContent(uploaded.id, other));
   await assert.rejects(() => media.upload(owner, {
@@ -193,6 +196,8 @@ test("media uploads validate, retry safely, persist store/product/deal galleries
   await prisma.deal.update({ where: { id: deal.id }, data: { status: DealStatus.PAUSED } });
   await assert.rejects(() => media.readContent(dealImage.id));
   await assert.rejects(() => media.readContent(productImage.id));
+  assert.ok((await media.readAdminContent(dealImage.id, "deal", deal.id)).bytes.length > 0, "admin offer review can read a private image without making it public");
+  await assert.rejects(() => media.readAdminContent(dealImage.id, "deal", otherStoreId), "admin offer image reads remain scoped to the exact deal");
 
   await media.remove(owner, retailerId, uploaded.id);
   await media.remove(owner, retailerId, replacement.id);

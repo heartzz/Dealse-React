@@ -14,6 +14,12 @@
 
 This blueprint is intentionally opinionated about engineering choices and explicit where product evidence is missing.
 
+## Administrator access foundation (2026-11-12)
+
+The existing Supabase identity and NestJS API remain authoritative. Admin endpoints require the existing provider-verified AAL2 claim and database `admin` role, followed by an active `admin_accounts` record and an exact permission grant. Root Admin receives permissions by role; other administrator roles remain least-privilege. The first Root Admin is established by the one-time server-side bootstrap documented in [ADR 0005](adr/0005-admin-backoffice-foundation.md). Existing admin role rows do not acquire permissions automatically. Marketplace states, retailer eligibility and public offer visibility are unchanged.
+
+Local first-root setup and migration steps are documented in [Admin Backoffice local setup](admin-backoffice-local-setup.md). Invitation tables are persistence only until an authorized acceptance flow is implemented.
+
 ## A. Existing DealSe context (reconstruction)
 
 | Topic | Established context | Gaps / confidence |
@@ -473,7 +479,7 @@ Detailed order:
 
 ## IMPLEMENTATION STATUS NOTE
 
-The production web/API slice now includes Supabase email/password sessions, NestJS authorization, customer discovery and favourites, retailer/store/product/deal workflows, and an initial AAL2-protected admin/moderation workspace. This status is a repository snapshot, not a claim that every browser journey or the recent admin changes have passed end-to-end verification; see [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for evidence and remaining gaps. The local PostgreSQL/PostGIS database remains the application system of record. Phone OTP is deferred; do not follow the historical [`backend-integration-plan.md`](backend-integration-plan.md) instructions to configure SMS as the next step.
+The production web/API slice now includes Supabase email/password sessions, NestJS authorization, customer discovery and favourites, retailer/store/product/deal workflows, and an AAL2-protected admin moderation workspace with retailer, store and offer list/detail routes. This status is a repository snapshot, not a claim that authenticated admin browser acceptance has passed; see [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for evidence and remaining gaps. The local PostgreSQL/PostGIS database remains the application system of record. Phone OTP is deferred; do not follow the historical [`backend-integration-plan.md`](backend-integration-plan.md) instructions to configure SMS as the next step.
 
 Nearby location discovery, saved-list error states and the transactional notification/follow API are implemented in source and covered by local integration checks. Remaining priorities are configuring and verifying production media storage, browser E2E coverage, live Supabase registration/MFA walkthroughs, and the remaining security hardening. Canonical deal/store pages, notification inboxes and media routes still need browser verification. Keep the Vite prototype as a visual reference while the Next.js experience is in use.
 

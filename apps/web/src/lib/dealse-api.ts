@@ -1,10 +1,47 @@
 import "server-only";
 
 export const dealseApiOrigin = () =>
-  (process.env.DEALSE_API_URL?.trim() || "http://127.0.0.1:3001").replace(/\/$/, "");
+  (process.env.DEALSE_API_URL?.trim() || "http://127.0.0.1:3001")
+    .replace(/\/+$/, "")
+    .replace(/\/api\/v1$/i, "");
+
+type ApiErrorCategory = "network_error" | "unauthorized" | "forbidden" | "not_found" | "request_rejected" | "server_error";
+
+function categoryForStatus(status: number): ApiErrorCategory {
+  if (status === 401) return "unauthorized";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status >= 500) return "server_error";
+  return "request_rejected";
+}
+
+function safeRequestId(value: string | null, fallback: string): string {
+  return value && /^[0-9a-f-]{36}$/i.test(value) ? value : fallback;
+}
+
+function stripControlCharacters(value: string): string {
+  return [...value].filter((character) => {
+    const code = character.charCodeAt(0);
+    return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+  }).join("");
+}
+
+function safeClientError(responseBody: unknown, fallback: string): string {
+  if (!responseBody || typeof responseBody !== "object" || !("message" in responseBody)) return fallback;
+  const raw = responseBody.message;
+  const message = typeof raw === "string" ? raw : Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string").join(" ") : "";
+  return stripControlCharacters(message).replace(/\s+/g, " ").trim().slice(0, 300) || fallback;
+}
 
 export class DealseApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly endpoint: string,
+    readonly method: string,
+    readonly requestId: string,
+    readonly category: ApiErrorCategory,
+  ) {
     super(message);
     this.name = "DealseApiError";
   }
@@ -15,31 +52,61 @@ export async function callDealseApi<T>(
   accessToken?: string,
   init: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown } = {},
 ): Promise<T> {
-  const response = await fetch(`${dealseApiOrigin()}/api/v1${path}`, {
-    method: init.method ?? "GET",
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-  });
+  const method = init.method ?? "GET";
+  const endpoint = path.split("?", 1)[0] || "/";
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const requestId = crypto.randomUUID();
+  let response: Response;
+  try {
+    response = await fetch(`${dealseApiOrigin()}/api/v1${normalizedPath}`, {
+      method,
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "X-Request-ID": requestId,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+    });
+  } catch {
+    console.error("[DealSe API] request failed", {
+      endpoint,
+      method,
+      status: null,
+      requestId,
+      category: "network_error",
+    });
+    throw new DealseApiError(
+      `The DealSe API could not be reached. Request ID: ${requestId}.`,
+      0,
+      endpoint,
+      method,
+      requestId,
+      "network_error",
+    );
+  }
   if (!response.ok) {
-    let message = "The DealSe API request failed. Please try again.";
-    try {
-      const problem = (await response.json()) as { message?: unknown; error?: unknown };
-      if (response.status < 500 && typeof problem.message === "string") message = problem.message;
-      else if (response.status < 500 && Array.isArray(problem.message)) {
-        const details = problem.message.filter((item): item is string => typeof item === "string");
-        if (details.length) message = details.join(" ");
-      } else if (response.status === 401) message = "Your session has expired. Sign in again and retry.";
-      else if (response.status === 403) message = "Your retailer account does not have permission to do that.";
-    } catch {
-      if (response.status === 401) message = "Your session has expired. Sign in again and retry.";
-      else if (response.status === 403) message = "Your retailer account does not have permission to do that.";
+    const responseRequestId = safeRequestId(response.headers.get("x-request-id"), requestId);
+    const category = categoryForStatus(response.status);
+    console.error("[DealSe API] request failed", {
+      endpoint,
+      method,
+      status: response.status,
+      requestId: responseRequestId,
+      category,
+    });
+    const fallback = response.status === 401 ? "The API rejected the current session. Sign in again and retry."
+      : response.status === 403 ? "Your administrator account does not have the required permission."
+      : response.status === 404 ? "The requested API endpoint or record was not found."
+      : response.status >= 500 ? "The DealSe API returned an internal error."
+      : "The DealSe API rejected the request.";
+    let message = fallback;
+    if (response.status >= 400 && response.status < 500 && ![401, 403, 404].includes(response.status)) {
+      try { message = safeClientError(await response.json(), fallback); } catch { /* Keep the safe status-based message. */ }
     }
-    throw new DealseApiError(message, response.status);
+    message = `${message} (HTTP ${response.status}; request ID: ${responseRequestId}).`;
+    throw new DealseApiError(message, response.status, endpoint, method, responseRequestId, category);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

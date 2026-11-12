@@ -127,6 +127,27 @@ export async function loginRetailer(formData: FormData): Promise<void> {
   redirect("/retailer/dashboard");
 }
 
+export async function loginAdmin(formData: FormData): Promise<void> {
+  const email = value(formData, "email").toLowerCase();
+  const password = value(formData, "password");
+  if (!validCredentials(email, password)) redirect("/admin/login?error=invalid");
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.session) redirect("/admin/login?error=auth");
+    const user = await callDealseApi<DealSeUser>("/auth/me", data.session.access_token);
+    if (!user.roles.includes("admin")) {
+      await supabase.auth.signOut({ scope: "local" });
+      redirect("/admin/login?error=unauthorized");
+    }
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    redirect(`/admin/login?error=${errorCode(error)}`);
+  }
+  redirect("/admin/dashboard");
+}
+
 export async function createRetailerProfile(formData: FormData): Promise<void> {
   const displayName = value(formData, "displayName");
   const businessName = value(formData, "businessName");
@@ -161,6 +182,10 @@ export async function logoutCustomer(): Promise<void> {
 
 export async function logoutRetailer(): Promise<void> {
   await signOut("/retailer/login");
+}
+
+export async function logoutAdmin(): Promise<void> {
+  await signOut("/admin/login");
 }
 
 async function signOut(destination: string): Promise<void> {

@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
     "admin:grant-local": "tsx prisma/grant-admin-local.ts",
-    "test": "tsx --test src/auth/auth.integration.spec.ts && tsx --test src/marketplace.integration.spec.ts && tsx --test src/media/media.integration.spec.ts",
+    "admin:bootstrap-root": "tsx prisma/bootstrap-root-admin.ts",
+    "test": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.test.json && node --test \"dist-test/**/*.spec.js\"",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio"

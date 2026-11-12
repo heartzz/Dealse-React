@@ -302,16 +302,8 @@ export class DealsService {
     await this.requireMembership(user.userId, retailerId, true);
     const current = await this.prisma.deal.findFirst({ where: { id: dealId, store: { retailerId } }, select: { id: true, slug: true, version: true, publishedAt: true, status: true, title: true, terms: true, categoryId: true, startsAt: true, endsAt: true, offerType: true, discountBps: true, discountAmountMinor: true, currency: true, originalPriceMinor: true, offerPriceMinor: true, moderationHoldAt: true, store: { select: { id: true, name: true, status: true, verifiedAt: true, retailer: { select: { status: true } } } } } });
     if (!current) throw new NotFoundException("Offer not found.");
-    if (current.status === DealStatus.ENDED) throw new BadRequestException("Ended offers cannot be published.");
-    if (current.moderationHoldAt) throw new ConflictException("This offer is on an admin moderation hold and cannot be published.");
-    if (current.store.retailer.status !== RetailerStatus.ACTIVE || current.store.status !== StoreStatus.ACTIVE || !current.store.verifiedAt) {
-      throw new ConflictException("Your retailer account and store must be approved before publishing offers.");
-    }
-    if (!current.categoryId) throw new BadRequestException("Choose a category before publishing.");
-    if (!current.title.trim() || !current.terms.trim()) throw new BadRequestException("Add an offer title and terms before publishing.");
-    this.validateTerms({ offerType: current.offerType, discountBps: current.discountBps ?? undefined, discountAmountMinor: current.discountAmountMinor === null ? undefined : Number(current.discountAmountMinor), currency: current.currency ?? undefined, originalPriceMinor: current.originalPriceMinor === null ? undefined : Number(current.originalPriceMinor), offerPriceMinor: current.offerPriceMinor === null ? undefined : Number(current.offerPriceMinor), startsAt: current.startsAt.toISOString(), endsAt: current.endsAt.toISOString() });
     const now = new Date();
-    if (current.endsAt <= now) throw new BadRequestException("The offer expiry must be in the future.");
+    this.assertPublicationEligible(current, now);
     const isFirstPublish = current.status !== DealStatus.PUBLISHED;
     const publishedAt = current.publishedAt ?? now;
     const record = await this.prisma.$transaction(async (tx) => {
@@ -338,6 +330,43 @@ export class DealsService {
       return published;
     });
     return this.present(record);
+  }
+
+  async publishForAdmin(tx: Prisma.TransactionClient, adminUserId: string, dealId: string, allowModerationHold = false) {
+    const current = await tx.deal.findUnique({ where: { id: dealId }, select: { id: true, slug: true, version: true, publishedAt: true, status: true, title: true, terms: true, categoryId: true, startsAt: true, endsAt: true, offerType: true, discountBps: true, discountAmountMinor: true, currency: true, originalPriceMinor: true, offerPriceMinor: true, moderationHoldAt: true, store: { select: { id: true, name: true, status: true, verifiedAt: true, retailer: { select: { status: true } } } } } });
+    if (!current) throw new NotFoundException("Offer not found.");
+    this.assertPublicationEligible(current, new Date(), allowModerationHold);
+    const firstPublish = current.status !== DealStatus.PUBLISHED;
+    const published = await tx.deal.update({
+      where: { id: dealId },
+      data: { status: DealStatus.PUBLISHED, publishedAt: current.publishedAt ?? new Date(), moderationHoldAt: null, moderationHoldByUserId: null, moderationReason: null, ...(firstPublish ? { version: { increment: 1 } } : {}) },
+      select: { id: true, status: true, publishedAt: true, version: true },
+    });
+    if (firstPublish) await this.notifications.notifyStoreFollowersOfPublishedDeal(tx, {
+      actorUserId: adminUserId,
+      dealId: current.id,
+      dealSlug: current.slug,
+      dealTitle: current.title,
+      storeId: current.store.id,
+      storeName: current.store.name,
+      version: published.version,
+    });
+    return published;
+  }
+
+  private assertPublicationEligible(
+    current: { status: DealStatus; moderationHoldAt: Date | null; store: { retailer: { status: RetailerStatus }; status: StoreStatus; verifiedAt: Date | null }; categoryId: string | null; title: string; terms: string; offerType: OfferType; discountBps: number | null; discountAmountMinor: bigint | null; currency: string | null; originalPriceMinor: bigint | null; offerPriceMinor: bigint | null; startsAt: Date; endsAt: Date },
+    now: Date,
+    allowModerationHold = false,
+  ) {
+    if (current.status === DealStatus.ENDED) throw new BadRequestException("Ended offers cannot be published.");
+    if (current.status === DealStatus.REJECTED && !allowModerationHold) throw new ConflictException("An administrator must review this rejected offer before it can be published.");
+    if (current.moderationHoldAt && !allowModerationHold) throw new ConflictException("This offer is on an admin moderation hold and cannot be published.");
+    if (current.store.retailer.status !== RetailerStatus.ACTIVE || current.store.status !== StoreStatus.ACTIVE || !current.store.verifiedAt) throw new ConflictException("Your retailer account and store must be approved before publishing offers.");
+    if (!current.categoryId) throw new BadRequestException("Choose a category before publishing.");
+    if (!current.title.trim() || !current.terms.trim()) throw new BadRequestException("Add an offer title and terms before publishing.");
+    this.validateTerms({ offerType: current.offerType, discountBps: current.discountBps ?? undefined, discountAmountMinor: current.discountAmountMinor === null ? undefined : Number(current.discountAmountMinor), currency: current.currency ?? undefined, originalPriceMinor: current.originalPriceMinor === null ? undefined : Number(current.originalPriceMinor), offerPriceMinor: current.offerPriceMinor === null ? undefined : Number(current.offerPriceMinor), startsAt: current.startsAt.toISOString(), endsAt: current.endsAt.toISOString() });
+    if (current.endsAt <= now) throw new BadRequestException("The offer expiry must be in the future.");
   }
 
   async pause(user: AuthPrincipal, retailerId: string, dealId: string) {

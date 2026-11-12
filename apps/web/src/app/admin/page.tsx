@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { callDealseApi, type DealSeUser } from "../../lib/dealse-api";
 import { requireWebSession } from "../../lib/auth-session";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
-import { logoutRetailer } from "../actions";
+import { logoutAdmin } from "../actions";
 import {
   approveRetailer,
   createCategory,
@@ -18,6 +18,8 @@ import {
   verifyStore,
 } from "./actions";
 import { AdminMfaGate } from "./mfa-gate";
+import { pendingAdminTotpFactors } from "./mfa-flow";
+import { auditActorLabel } from "./audit-actor-label.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +29,7 @@ type Store = { id: string; name: string; city: string; locality: string | null; 
 type Deal = { id: string; title: string; status: string; moderationHoldAt: string | null; moderationReason: string | null; endsAt: string; store: { name: string; city: string; retailer: { displayName: string } }; category: { name: string } | null };
 type Report = { id: string; reason: string; details: string | null; createdAt: string; reporter: { emailNormalized: string | null; profile: { displayName: string | null } | null }; deal: { id: string; title: string; status: string; store: { name: string; retailer: { displayName: string } } } };
 type Category = { id: string; slug: string; name: string; sortOrder: number; isActive: boolean };
-type AuditLog = { id: string; actorType: string; action: string; entityType: string; entityId: string; createdAt: string; afterSnapshot: unknown; actor: { emailNormalized: string | null; profile: { displayName: string | null } | null } };
+type AuditLog = { id: string; actorType: string; action: string; entityType: string; entityId: string; createdAt: string; afterSnapshot: unknown; actor: { emailNormalized: string | null; profile: { displayName: string | null } | null } | null };
 type Overview = { pendingRetailers: number; unreviewedStores: number; publishedDeals: number; openReports: number };
 
 function date(value: string | null | undefined): string {
@@ -49,17 +51,17 @@ async function getData<T>(path: string, token: string, fallback: T): Promise<{ v
 }
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
-  const { accessToken } = await requireWebSession("/customer/login");
+  const { accessToken } = await requireWebSession("/admin/login");
   let user: DealSeUser;
   try {
     user = await callDealseApi<DealSeUser>("/auth/me", accessToken);
   } catch {
-    redirect("/customer/login?error=setup");
+    redirect("/admin/login?error=setup");
   }
   if (!user.roles.includes("admin")) {
     return (
       <main className="admin-shell">
-        <header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link><form action={logoutRetailer}><button className="admin-button admin-button--quiet" type="submit">Log out</button></form></header>
+        <header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link><form action={logoutAdmin}><button className="admin-button admin-button--quiet" type="submit">Log out</button></form></header>
         <section className="admin-access-card"><span className="admin-eyebrow">Restricted workspace</span><h1>Admin access required</h1><p>Your DealSe account does not have the database-backed admin role. Ask an authorized operator to grant access.</p><Link className="admin-button" href="/">Return to marketplace</Link></section>
       </main>
     );
@@ -67,10 +69,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const supabase = await createSupabaseServerClient();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
-  if (claimsError || !claimsData?.claims.sub) redirect("/customer/login");
+  if (claimsError || !claimsData?.claims.sub) redirect("/admin/login");
   if (claimsData.claims.aal !== "aal2") {
     const { data: factorData, error: factorError } = await supabase.auth.mfa.listFactors();
-    return <main className="admin-shell"><header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link></header><AdminMfaGate hasVerifiedTotp={Boolean(factorData?.totp.length)} initialError={factorError ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} /></main>;
+    return <main className="admin-shell"><header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link></header><AdminMfaGate hasVerifiedTotp={Boolean(factorData?.totp.length)} hasPendingTotp={Boolean(factorData && pendingAdminTotpFactors(factorData.all).length)} initialError={factorError ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} /></main>;
+  }
+
+  try {
+    await callDealseApi("/admin/me", accessToken);
+  } catch {
+    redirect("/admin/login?error=unauthorized");
   }
 
   const params = await searchParams;
@@ -95,11 +103,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     <main className="admin-shell">
       <header className="admin-header">
         <div className="admin-brand"><Link className="brand-mark" href="/">DealSe</Link><span>Operations</span></div>
-        <nav aria-label="Admin workspace"><a href="#review">Review queue</a><a href="#offers">Offers</a><a href="#categories">Categories</a><a href="#audit">Audit log</a></nav>
-        <form action={logoutRetailer}><button className="admin-button admin-button--quiet" type="submit">Log out</button></form>
+        <form action={logoutAdmin}><button className="admin-button admin-button--quiet" type="submit">Log out</button></form>
       </header>
       <div className="admin-content">
-        <section className="admin-page-heading"><div><span className="admin-eyebrow">DealSe administration</span><h1>Marketplace operations</h1><p>Review retailer onboarding, protect offer quality and keep a clear record of administrative changes.</p></div><span className="admin-user-chip">{user.profile.displayName || user.email || "Administrator"}</span></section>
+        <section className="admin-page-heading" id="overview"><div><span className="admin-eyebrow">DealSe administration</span><h1>Marketplace operations</h1><p>Review retailer onboarding, protect offer quality and keep a clear record of administrative changes.</p></div><span className="admin-user-chip">{user.profile.displayName || user.email || "Administrator"}</span></section>
         {message ? <p className={`admin-notice ${params.error ? "admin-notice--error" : "admin-notice--success"}`} role="status">{message === "admin_required" ? "Admin access is required for this action." : message}</p> : null}
         {errors.length ? <div className="admin-notice admin-notice--error" role="status"><strong>Some sections could not be loaded.</strong><ul>{errors.map((error, index) => <li key={`${index}-${error}`}>{error}</li>)}</ul></div> : null}
 
@@ -139,7 +146,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </section>
 
         <section className="admin-panel" id="audit"><div className="admin-section-heading"><div><span className="admin-eyebrow">Accountability</span><h2>Recent admin activity</h2><p>Administrative state changes are written to PostgreSQL in the same transaction.</p></div><span className="admin-count">{auditLogs.value.total}</span></div>
-          {auditLogs.value.items.length ? <div className="admin-audit-list">{auditLogs.value.items.map((entry) => <article className="admin-audit-row" key={entry.id}><div><strong>{entry.action.replaceAll(".", " ")}</strong><span>{entry.entityType} · {entry.entityId}</span></div><div><strong>{entry.actor.profile?.displayName || entry.actor.emailNormalized || entry.actorType}</strong><span>{date(entry.createdAt)}</span></div></article>)}</div> : <p className="admin-empty">No administrative actions have been recorded yet.</p>}
+          {auditLogs.value.items.length ? <div className="admin-audit-list">{auditLogs.value.items.map((entry) => <article className="admin-audit-row" key={entry.id}><div><strong>{entry.action.replaceAll(".", " ")}</strong><span>{entry.entityType} · {entry.entityId}</span></div><div><strong>{auditActorLabel(entry.actor, entry.actorType)}</strong><span>{date(entry.createdAt)}</span></div></article>)}</div> : <p className="admin-empty">No administrative actions have been recorded yet.</p>}
         </section>
       </div>
     </main>

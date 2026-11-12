@@ -366,6 +366,21 @@ export class MediaService {
     return { bytes, mimeType: media.mimeType, checksumSha256: media.checksumSha256 ?? createHash("sha256").update(bytes).digest("hex"), isPublic };
   }
 
+  async readAdminContent(mediaId: string, targetType: "store" | "deal", targetId: string) {
+    const media = await this.prisma.mediaAsset.findFirst({
+      where: {
+        id: mediaId,
+        processingStatus: MediaProcessingStatus.READY,
+        deletedAt: null,
+        ...(targetType === "store" ? { storeImages: { some: { storeId: targetId } } } : { dealImages: { some: { dealId: targetId } } }),
+      },
+      select: { storageProvider: true, bucket: true, objectKey: true, mimeType: true, checksumSha256: true },
+    });
+    if (!media) throw new NotFoundException("Image not found.");
+    const bytes = await this.storage.get(this.storageLocation(media.storageProvider, media.bucket, media.objectKey));
+    return { bytes, mimeType: media.mimeType, checksumSha256: media.checksumSha256 ?? createHash("sha256").update(bytes).digest("hex") };
+  }
+
   private async resolveTarget(input: UploadMediaDto): Promise<{ name: string }> {
     if (input.purpose === MediaPurpose.STORE) {
       const target = await this.prisma.store.findFirst({ where: { id: input.targetId, retailerId: input.retailerId }, select: { name: true } });

@@ -1,4 +1,4 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
 import { DealReportReason, DealReportStatus, DealStatus, RetailerStatus, StoreStatus } from "../../generated/prisma/enums.js";
 
@@ -6,28 +6,39 @@ const trimmed = ({ value }: { value: unknown }) => typeof value === "string" ? v
 const queryNumber = (fallback: number) => ({ value }: { value: unknown }) => value === undefined ? fallback : Number(value);
 
 export class AdminPageQueryDto {
-  @IsOptional() @Transform(queryNumber(1)) @IsInt() @Min(1) page = 1;
-  @IsOptional() @Transform(queryNumber(20)) @IsInt() @Min(1) @Max(100) limit = 20;
+  @IsOptional() @Type(() => Number) @Transform(queryNumber(1)) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @Transform(queryNumber(20)) @IsInt() @Min(1) @Max(100) limit = 20;
 }
 
 export class AdminRetailerQueryDto extends AdminPageQueryDto {
-  @IsOptional() @IsEnum(RetailerStatus) status?: RetailerStatus;
+  @IsOptional() @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value) @IsEnum(RetailerStatus) status?: RetailerStatus;
+  @IsOptional() @Transform(({ value }) => value === true || value === "true") @IsBoolean() all?: boolean;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 100) q?: string;
 }
 
 export class AdminStoreQueryDto extends AdminPageQueryDto {
-  @IsOptional() @IsEnum(StoreStatus) status?: StoreStatus;
+  @IsOptional() @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value) @IsEnum(StoreStatus) status?: StoreStatus;
+  @IsOptional() @Transform(({ value }) => value === true || value === "true") @IsBoolean() all?: boolean;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 100) q?: string;
 }
 
 export class AdminDealQueryDto extends AdminPageQueryDto {
-  @IsOptional() @IsEnum(DealStatus) status?: DealStatus;
+  @IsOptional() @Transform(({ value }) => {
+    if (typeof value !== "string") return value;
+    const normalized = value.toLowerCase();
+    return ["pending", "suspended", "paused", "expired"].includes(normalized) ? normalized : value.toUpperCase();
+  }) @IsIn([...Object.values(DealStatus), "pending", "suspended", "paused", "expired"]) status?: DealStatus | "pending" | "suspended" | "paused" | "expired";
+  @IsOptional() @Transform(({ value }) => value === true || value === "true") @IsBoolean() all?: boolean;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 100) q?: string;
 }
 
 export class AdminReportQueryDto extends AdminPageQueryDto {
-  @IsOptional() @IsEnum(DealReportStatus) status?: DealReportStatus;
+  @IsOptional() @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value) @IsEnum(DealReportStatus) status?: DealReportStatus;
 }
 
 export class AdminAuditQueryDto extends AdminPageQueryDto {
   @IsOptional() @Transform(trimmed) @IsString() @Length(1, 80) entityType?: string;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 80) entityId?: string;
 }
 
 export class ModerationReasonDto {

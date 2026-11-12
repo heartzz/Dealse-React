@@ -26,11 +26,54 @@ enum AccountRole {
   @@map("account_role")
 }
 
+enum AdminRole {
+  ROOT_ADMIN  @map("root_admin")
+  SUPER_ADMIN @map("super_admin")
+  ADMIN       @map("admin")
+
+  @@map("admin_role")
+}
+
+enum AdminAccountStatus {
+  PENDING   @map("pending")
+  ACTIVE    @map("active")
+  SUSPENDED @map("suspended")
+  REVOKED   @map("revoked")
+
+  @@map("admin_account_status")
+}
+
+enum AdminPermissionKey {
+  DASHBOARD_READ    @map("dashboard.read")
+  RETAILERS_READ    @map("retailers.read")
+  RETAILERS_REVIEW  @map("retailers.review")
+  RETAILERS_SUSPEND @map("retailers.suspend")
+  STORES_READ       @map("stores.read")
+  STORES_VERIFY     @map("stores.verify")
+  STORES_SUSPEND    @map("stores.suspend")
+  OFFERS_READ       @map("offers.read")
+  OFFERS_REVIEW     @map("offers.review")
+  OFFERS_PAUSE      @map("offers.pause")
+  OFFERS_REMOVE     @map("offers.remove")
+  CUSTOMERS_READ    @map("customers.read")
+  CUSTOMERS_SUSPEND @map("customers.suspend")
+  REDEMPTIONS_READ  @map("redemptions.read")
+  CATEGORIES_READ   @map("categories.read")
+  CATEGORIES_MANAGE @map("categories.manage")
+  ANALYTICS_READ    @map("analytics.read")
+  AUDIT_READ        @map("audit.read")
+  ADMINS_MANAGE     @map("admins.manage")
+  SETTINGS_MANAGE   @map("settings.manage")
+
+  @@map("admin_permission_key")
+}
+
 enum RetailerStatus {
   PENDING   @map("pending")
   ACTIVE    @map("active")
   SUSPENDED @map("suspended")
   CLOSED    @map("closed")
+  REJECTED  @map("rejected")
 
   @@map("retailer_status")
 }
@@ -57,6 +100,7 @@ enum StoreStatus {
   ACTIVE               @map("active")
   PAUSED               @map("paused")
   CLOSED               @map("closed")
+  REJECTED             @map("rejected")
 
   @@map("store_status")
 }
@@ -74,6 +118,7 @@ enum DealStatus {
   PUBLISHED @map("published")
   PAUSED    @map("paused")
   ENDED     @map("ended")
+  REJECTED  @map("rejected")
 
   @@map("deal_status")
 }
@@ -143,25 +188,31 @@ model User {
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
   lastSignedInAt  DateTime?  @map("last_signed_in_at") @db.Timestamptz(6)
 
-  profile             UserProfile?
-  accountRoles        UserAccountRole[]
-  memberships         RetailerMembership[] @relation("MembershipUser")
-  invitedMemberships  RetailerMembership[] @relation("MembershipInviter")
-  createdRetailers    Retailer[]           @relation("RetailerCreator")
-  createdProducts     Product[]            @relation("ProductCreator")
-  createdDeals        Deal[]               @relation("DealCreator")
-  verifiedStores      Store[]              @relation("StoreVerifier")
-  uploadedMedia       MediaAsset[]         @relation("MediaOwner")
-  favourites          Favourite[]
-  followedStores      FollowedStore[]
-  notifications       Notification[]   @relation("NotificationRecipient")
-  redemptionCodes     RedemptionCode[]     @relation("CodeCustomer")
-  customerRedemptions Redemption[]         @relation("RedemptionCustomer")
-  staffRedemptions    Redemption[]         @relation("RedemptionStaff")
-  auditEvents         AuditLog[]           @relation("AuditActor")
-  moderatedDeals      Deal[]               @relation("DealModerator")
-  filedDealReports    DealReport[]         @relation("DealReportReporter")
-  reviewedDealReports DealReport[]         @relation("DealReportReviewer")
+  profile                  UserProfile?
+  accountRoles             UserAccountRole[]
+  memberships              RetailerMembership[]   @relation("MembershipUser")
+  invitedMemberships       RetailerMembership[]   @relation("MembershipInviter")
+  createdRetailers         Retailer[]             @relation("RetailerCreator")
+  createdProducts          Product[]              @relation("ProductCreator")
+  createdDeals             Deal[]                 @relation("DealCreator")
+  verifiedStores           Store[]                @relation("StoreVerifier")
+  uploadedMedia            MediaAsset[]           @relation("MediaOwner")
+  favourites               Favourite[]
+  followedStores           FollowedStore[]
+  notifications            Notification[]         @relation("NotificationRecipient")
+  redemptionCodes          RedemptionCode[]       @relation("CodeCustomer")
+  customerRedemptions      Redemption[]           @relation("RedemptionCustomer")
+  staffRedemptions         Redemption[]           @relation("RedemptionStaff")
+  auditEvents              AuditLog[]             @relation("AuditActor")
+  adminAccount             AdminAccount?
+  adminAccountsInvited     AdminAccount[]         @relation("AdminAccountInviter")
+  adminGrantsMade          AdminPermissionGrant[] @relation("AdminPermissionGrantor")
+  adminInvitations         AdminInvitation[]      @relation("AdminInvitationCreator")
+  acceptedAdminInvitations AdminInvitation[]      @relation("AdminInvitationAcceptor")
+  bootstrapRecord          AdminBootstrap?        @relation("AdminBootstrapUser")
+  moderatedDeals           Deal[]                 @relation("DealModerator")
+  filedDealReports         DealReport[]           @relation("DealReportReporter")
+  reviewedDealReports      DealReport[]           @relation("DealReportReviewer")
 
   @@unique([authProvider, authSubject])
   @@index([status, createdAt])
@@ -178,6 +229,67 @@ model UserAccountRole {
   @@id([userId, role])
   @@index([role, createdAt])
   @@map("user_account_roles")
+}
+
+model AdminAccount {
+  userId      String             @id @map("user_id") @db.Uuid
+  role        AdminRole
+  status      AdminAccountStatus @default(PENDING)
+  invitedById String?            @map("invited_by_id") @db.Uuid
+  acceptedAt  DateTime?          @map("accepted_at") @db.Timestamptz(6)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invitedBy   User?                  @relation("AdminAccountInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  permissions AdminPermissionGrant[]
+
+  @@index([role, status])
+  @@map("admin_accounts")
+}
+
+model AdminPermissionGrant {
+  userId      String             @map("user_id") @db.Uuid
+  permission  AdminPermissionKey
+  grantedById String?            @map("granted_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  admin     AdminAccount @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  grantedBy User?        @relation("AdminPermissionGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, permission])
+  @@index([permission, userId])
+  @@map("admin_permission_grants")
+}
+
+model AdminInvitation {
+  id              String               @id @default(uuid()) @db.Uuid
+  emailNormalized String               @map("email_normalized") @db.VarChar(320)
+  role            AdminRole
+  permissionKeys  AdminPermissionKey[] @default([]) @map("permission_keys")
+  invitedById     String               @map("invited_by_id") @db.Uuid
+  acceptedById    String?              @map("accepted_by_id") @db.Uuid
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt       DateTime             @map("expires_at") @db.Timestamptz(6)
+  acceptedAt      DateTime?            @map("accepted_at") @db.Timestamptz(6)
+  revokedAt       DateTime?            @map("revoked_at") @db.Timestamptz(6)
+
+  invitedBy  User  @relation("AdminInvitationCreator", fields: [invitedById], references: [id], onDelete: Restrict)
+  acceptedBy User? @relation("AdminInvitationAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([emailNormalized, expiresAt])
+  @@index([invitedById, createdAt])
+  @@map("admin_invitations")
+}
+
+model AdminBootstrap {
+  id            Int      @id @default(1)
+  userId        String   @unique @map("user_id") @db.Uuid
+  establishedAt DateTime @default(now()) @map("established_at") @db.Timestamptz(6)
+
+  user User @relation("AdminBootstrapUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("admin_bootstrap")
 }
 
 model UserProfile {
@@ -282,15 +394,15 @@ model Store {
   updatedAt        DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
   publishedAt      DateTime?                              @map("published_at") @db.Timestamptz(6)
 
-  retailer    Retailer        @relation(fields: [retailerId], references: [id], onDelete: Restrict)
-  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  verifiedBy  User?           @relation("StoreVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
-  products    Product[]
-  deals       Deal[]
-  images      StoreImage[]
-  followers   FollowedStore[]
+  retailer      Retailer        @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+  category      Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  verifiedBy    User?           @relation("StoreVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+  products      Product[]
+  deals         Deal[]
+  images        StoreImage[]
+  followers     FollowedStore[]
   notifications Notification[]
-  redemptions Redemption[]
+  redemptions   Redemption[]
 
   @@unique([retailerId, slug])
   @@index([retailerId, status])
@@ -386,48 +498,48 @@ model ProductImage {
 }
 
 model Deal {
-  id                  String     @id @default(uuid()) @db.Uuid
-  storeId             String     @map("store_id") @db.Uuid
-  categoryId          String?    @map("category_id") @db.Uuid
-  createdByUserId     String     @map("created_by_user_id") @db.Uuid
-  slug                String     @db.VarChar(140)
-  title               String     @db.VarChar(180)
-  summary             String?    @db.VarChar(320)
-  details             String?    @db.Text
-  terms               String     @db.Text
-  offerType           OfferType  @map("offer_type")
-  discountBps         Int?       @map("discount_bps")
-  discountAmountMinor BigInt?    @map("discount_amount_minor")
-  currency            String?    @db.Char(3)
-  originalPriceMinor  BigInt?    @map("original_price_minor")
-  offerPriceMinor     BigInt?    @map("offer_price_minor")
-  imageReference      String?    @map("image_reference") @db.VarChar(1000)
-  startsAt            DateTime   @map("starts_at") @db.Timestamptz(6)
-  endsAt              DateTime   @map("ends_at") @db.Timestamptz(6)
-  storeTimezone       String     @map("store_timezone") @db.VarChar(64)
-  status              DealStatus @default(DRAFT)
-  maxRedemptions      Int?       @map("max_redemptions")
-  redemptionCount     Int        @default(0) @map("redemption_count")
-  perCustomerLimit    Int        @default(1) @map("per_customer_limit")
-  version             Int        @default(1)
-  publishedAt         DateTime?  @map("published_at") @db.Timestamptz(6)
-  moderationHoldAt    DateTime?  @map("moderation_hold_at") @db.Timestamptz(6)
-  moderationHoldByUserId String? @map("moderation_hold_by_user_id") @db.Uuid
-  moderationReason    String?    @map("moderation_reason") @db.VarChar(500)
-  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String     @id @default(uuid()) @db.Uuid
+  storeId                String     @map("store_id") @db.Uuid
+  categoryId             String?    @map("category_id") @db.Uuid
+  createdByUserId        String     @map("created_by_user_id") @db.Uuid
+  slug                   String     @db.VarChar(140)
+  title                  String     @db.VarChar(180)
+  summary                String?    @db.VarChar(320)
+  details                String?    @db.Text
+  terms                  String     @db.Text
+  offerType              OfferType  @map("offer_type")
+  discountBps            Int?       @map("discount_bps")
+  discountAmountMinor    BigInt?    @map("discount_amount_minor")
+  currency               String?    @db.Char(3)
+  originalPriceMinor     BigInt?    @map("original_price_minor")
+  offerPriceMinor        BigInt?    @map("offer_price_minor")
+  imageReference         String?    @map("image_reference") @db.VarChar(1000)
+  startsAt               DateTime   @map("starts_at") @db.Timestamptz(6)
+  endsAt                 DateTime   @map("ends_at") @db.Timestamptz(6)
+  storeTimezone          String     @map("store_timezone") @db.VarChar(64)
+  status                 DealStatus @default(DRAFT)
+  maxRedemptions         Int?       @map("max_redemptions")
+  redemptionCount        Int        @default(0) @map("redemption_count")
+  perCustomerLimit       Int        @default(1) @map("per_customer_limit")
+  version                Int        @default(1)
+  publishedAt            DateTime?  @map("published_at") @db.Timestamptz(6)
+  moderationHoldAt       DateTime?  @map("moderation_hold_at") @db.Timestamptz(6)
+  moderationHoldByUserId String?    @map("moderation_hold_by_user_id") @db.Uuid
+  moderationReason       String?    @map("moderation_reason") @db.VarChar(500)
+  createdAt              DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  store       Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  category    Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  createdBy   User             @relation("DealCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  moderationHeldBy User?       @relation("DealModerator", fields: [moderationHoldByUserId], references: [id], onDelete: SetNull)
-  products    DealProduct[]
-  images      DealImage[]
-  reports     DealReport[]
-  notifications Notification[]
-  favourites  Favourite[]
-  codes       RedemptionCode[]
-  redemptions Redemption[]
+  store            Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy        User             @relation("DealCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  moderationHeldBy User?            @relation("DealModerator", fields: [moderationHoldByUserId], references: [id], onDelete: SetNull)
+  products         DealProduct[]
+  images           DealImage[]
+  reports          DealReport[]
+  notifications    Notification[]
+  favourites       Favourite[]
+  codes            RedemptionCode[]
+  redemptions      Redemption[]
 
   @@unique([storeId, slug])
   @@unique([id, storeId])
@@ -586,17 +698,19 @@ model Redemption {
 }
 
 model AuditLog {
-  id             String   @id @default(uuid()) @db.Uuid
-  actorUserId    String?  @map("actor_user_id") @db.Uuid
-  actorType      String   @map("actor_type") @db.VarChar(32)
-  action         String   @db.VarChar(100)
-  entityType     String   @map("entity_type") @db.VarChar(80)
-  entityId       String?  @map("entity_id") @db.Uuid
-  retailerId     String?  @map("retailer_id") @db.Uuid
-  requestId      String?  @map("request_id") @db.Uuid
-  beforeSnapshot Json?    @map("before_snapshot") @db.JsonB
-  afterSnapshot  Json?    @map("after_snapshot") @db.JsonB
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id               String               @id @default(uuid()) @db.Uuid
+  actorUserId      String?              @map("actor_user_id") @db.Uuid
+  actorType        String               @map("actor_type") @db.VarChar(32)
+  action           String               @db.VarChar(100)
+  entityType       String               @map("entity_type") @db.VarChar(80)
+  entityId         String?              @map("entity_id") @db.Uuid
+  retailerId       String?              @map("retailer_id") @db.Uuid
+  requestId        String?              @map("request_id") @db.Uuid
+  actorAdminRole   AdminRole?           @map("actor_admin_role")
+  actorPermissions AdminPermissionKey[] @default([]) @map("actor_permissions")
+  beforeSnapshot   Json?                @map("before_snapshot") @db.JsonB
+  afterSnapshot    Json?                @map("after_snapshot") @db.JsonB
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
   actor    User?     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
   retailer Retailer? @relation(fields: [retailerId], references: [id], onDelete: SetNull)

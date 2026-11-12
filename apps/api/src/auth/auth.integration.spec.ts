@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { AccountRole } from "../generated/prisma/enums.js";
+import { AccountRole, AdminAccountStatus, AdminPermissionKey, AdminRole } from "../generated/prisma/enums.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { RetailersService } from "../retailers/retailers.service.js";
 import { AppModule } from "../app.module.js";
@@ -45,6 +45,8 @@ after(async () => {
         where: { retailerId: { in: retailerIds } },
       });
       await transaction.retailer.deleteMany({ where: { id: { in: retailerIds } } });
+      await transaction.adminPermissionGrant.deleteMany({ where: { userId: { in: userIds } } });
+      await transaction.adminAccount.deleteMany({ where: { userId: { in: userIds } } });
       await transaction.userAccountRole.deleteMany({ where: { userId: { in: userIds } } });
       await transaction.userProfile.deleteMany({ where: { userId: { in: userIds } } });
       await transaction.user.deleteMany({ where: { id: { in: userIds } } });
@@ -239,6 +241,7 @@ test("NestJS accepts a signed issuer/audience-bound token and rejects a forged s
       assert.equal(adminDenied.status, 403, "retailer account cannot enter the admin workspace API");
       assert.ok(request.authPrincipal?.userId);
       await prisma.userAccountRole.create({ data: { userId: request.authPrincipal.userId, role: AccountRole.ADMIN } });
+      await prisma.adminAccount.create({ data: { userId: request.authPrincipal.userId, role: AdminRole.ADMIN, status: AdminAccountStatus.ACTIVE, acceptedAt: new Date() } });
       const aal1Token = await new SignJWT({ email: `jwt-${suffix}@example.invalid`, aal: "aal1" })
         .setProtectedHeader({ alg: "RS256", kid: jwk.kid })
         .setIssuer(issuer)
@@ -252,9 +255,47 @@ test("NestJS accepts a signed issuer/audience-bound token and rejects a forged s
       });
       assert.equal(aal1Denied.status, 403, "an admin role without verified MFA cannot use admin APIs");
       const adminAllowed = await fetch(`${apiOrigin}/api/v1/admin/overview`, { headers: authorization });
-      const adminBody = await adminAllowed.text();
-      assert.equal(adminAllowed.status, 200, adminBody);
+      assert.equal(adminAllowed.status, 403, "an active administrator without an explicit permission is denied");
+      await prisma.adminPermissionGrant.create({ data: { userId: request.authPrincipal.userId, permission: AdminPermissionKey.DASHBOARD_READ } });
+      const permittedAdmin = await fetch(`${apiOrigin}/api/v1/admin/overview`, { headers: authorization });
+      const adminBody = await permittedAdmin.text();
+      assert.equal(permittedAdmin.status, 200, adminBody);
       assert.deepEqual(Object.keys(JSON.parse(adminBody)).sort(), ["openReports", "pendingRetailers", "publishedDeals", "unreviewedStores"]);
+
+      const retailerReadDenied = await fetch(`${apiOrigin}/api/v1/admin/retailers`, { headers: authorization });
+      assert.equal(retailerReadDenied.status, 403, "dashboard permission does not grant retailer data access");
+      await prisma.adminPermissionGrant.create({ data: { userId: request.authPrincipal.userId, permission: AdminPermissionKey.RETAILERS_READ } });
+      const retailerReadAllowed = await fetch(`${apiOrigin}/api/v1/admin/retailers?all=true`, { headers: authorization });
+      assert.equal(retailerReadAllowed.status, 200, await retailerReadAllowed.text());
+      const storeReadDenied = await fetch(`${apiOrigin}/api/v1/admin/stores`, { headers: authorization });
+      assert.equal(storeReadDenied.status, 403, "retailer read permission cannot access store data");
+      const reviewDenied = await fetch(`${apiOrigin}/api/v1/admin/retailers/${retailerIds[0]}/approve`, { method: "POST", headers: authorization });
+      assert.equal(reviewDenied.status, 403, "read permission cannot approve a retailer");
+
+      const moduleChecks = [
+        { permission: AdminPermissionKey.STORES_READ, path: "/admin/stores?limit=20", label: "store listing" },
+        { permission: AdminPermissionKey.OFFERS_READ, path: "/admin/deals?status=published&limit=20", label: "offer listing" },
+        { permission: AdminPermissionKey.OFFERS_READ, path: "/admin/reports?status=open&limit=20", label: "open reports (lowercase UI status)" },
+        { permission: AdminPermissionKey.CATEGORIES_READ, path: "/admin/categories", label: "categories" },
+        { permission: AdminPermissionKey.AUDIT_READ, path: "/admin/audit-logs?limit=20", label: "audit logs" },
+        { permission: AdminPermissionKey.ADMINS_MANAGE, path: "/admin/admin-users?limit=20", label: "admin users" },
+        { permission: AdminPermissionKey.ADMINS_MANAGE, path: "/admin/admin-users/invitations", label: "admin invitations" },
+      ] as const;
+      await prisma.adminAccount.update({ where: { userId: request.authPrincipal.userId }, data: { role: AdminRole.ROOT_ADMIN } });
+      for (const check of moduleChecks) {
+        const response = await fetch(`${apiOrigin}/api/v1${check.path}`, { headers: authorization });
+        const body = await response.text();
+        assert.equal(response.status, 200, `${check.label} endpoint returned ${response.status}: ${body}`);
+      }
+
+      await prisma.adminPermissionGrant.create({ data: { userId: request.authPrincipal.userId, permission: AdminPermissionKey.RETAILERS_REVIEW } });
+      const approvedResponse = await fetch(`${apiOrigin}/api/v1/admin/retailers/${retailerIds[0]}/approve`, { method: "POST", headers: authorization });
+      assert.equal(approvedResponse.status, 201, await approvedResponse.text());
+      assert.ok(await prisma.auditLog.findFirst({ where: { actorUserId: request.authPrincipal.userId, action: "retailer.approved", entityId: retailerIds[0] } }), "authorized state change writes an audit event");
+      await prisma.adminPermissionGrant.create({ data: { userId: request.authPrincipal.userId, permission: AdminPermissionKey.RETAILERS_SUSPEND } });
+      const invalidReason = await fetch(`${apiOrigin}/api/v1/admin/retailers/${retailerIds[0]}/suspend`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify({ reason: " " }) });
+      assert.equal(invalidReason.status, 400, "blank suspension reason is rejected by the API");
+      assert.equal(await prisma.auditLog.count({ where: { actorUserId: request.authPrincipal.userId, action: "retailer.suspended", entityId: retailerIds[0] } }), 0, "failed action leaves no misleading audit event");
     } finally {
       await app.close();
     }
