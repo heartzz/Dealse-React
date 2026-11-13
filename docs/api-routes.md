@@ -60,6 +60,22 @@
 
 In-app notices are persisted in PostgreSQL. Publishing creates a retailer confirmation and notifies active customers following that store; updating a currently valid published deal notifies customers who saved it. Notification creation shares the deal transaction and deduplicates by deal version. This phase does not send email, SMS, web push or mobile push.
 
+## QR redemption
+
+| Method and path | Access | Purpose |
+|---|---|---|
+| `POST /customers/me/claims` | Customer | Claim an eligible published offer. Body: `{ "dealId": "…" }`. Returns claim metadata and the raw QR credential only when a new credential is issued. Repeated requests return the existing claim metadata without another raw credential. |
+| `GET /customers/me/claims?page=1&limit=20&status=...&dealId=...` | Customer | List the caller's own claim metadata; credentials and hashes are never returned. |
+| `POST /customers/me/claims/:claimId/credential/rotate` | Customer | Rotate an expired, unused claim. Returns the new raw credential once and invalidates the old one. |
+| `DELETE /customers/me/claims/:claimId` | Customer | Cancel an unused, unexpired claim; repeated cancellation is safe and cancellation is audited. |
+| `POST /retailers/:retailerId/stores/:storeId/redemptions/validate` | Retailer + active membership | Validate a credential without changing redemption state. Body: `{ "credential": "…" }`. Returns a safe offer/store preview with terms, dates and existing discount/pricing fields; no customer identity data is returned. |
+| `POST /retailers/:retailerId/stores/:storeId/redemptions/confirm` | Retailer + active membership | Explicitly redeem a valid credential. Requires `Idempotency-Key` (1–128 characters) and the same credential body as validate. |
+| `GET /retailers/:retailerId/stores/:storeId/redemptions?page=1&limit=20&dealId=...&from=...&to=...` | Retailer + active membership | Paginated redemption history for the owned store only. |
+| `GET /admin/redemptions` and `GET /admin/redemptions/:redemptionId` | Admin + AAL2 + `redemptions.read` | Inspect redemption records. |
+| `GET /admin/redemption-claims` and `GET /admin/redemption-claims/:claimId` | Admin + AAL2 + `redemptions.read` | Inspect claim metadata and its redemption/audit linkage. Credential hashes are not exposed. |
+
+QR credentials are high-entropy random values. PostgreSQL stores only SHA-256 hashes. The raw credential is returned only on issuance/rotation and cannot be retrieved again; if the customer loses it before expiry, the current V1 API requires waiting until expiry before rotating. Credentials expire after five minutes or at the earlier deal end. Outstanding claims do not reserve global offer capacity; only successful redemptions increment the deal count. Confirmation and audit writes are atomic, and a repeated confirmation with the same store-scoped idempotency key, actor and credential returns the original result.
+
 ## Admin operations
 
 All endpoints below require both the database `ADMIN` role and verified AAL2.
@@ -89,4 +105,4 @@ State-changing admin actions and their audit snapshots are committed in one data
 
 ## Not yet exposed
 
-There is no redemption API, analytics event API, or generated OpenAPI artifact in the current application. The media API supports local development storage and a Supabase Storage adapter; production bucket configuration remains a deployment prerequisite. See [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for current implementation and verification status.
+There is no analytics event API or generated OpenAPI artifact in the current application. The media API supports local development storage and a Supabase Storage adapter; production bucket configuration remains a deployment prerequisite. See [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for current implementation and verification status.

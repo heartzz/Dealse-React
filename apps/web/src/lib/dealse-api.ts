@@ -50,7 +50,7 @@ export class DealseApiError extends Error {
 export async function callDealseApi<T>(
   path: string,
   accessToken?: string,
-  init: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown } = {},
+  init: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown; idempotencyKey?: string } = {},
 ): Promise<T> {
   const method = init.method ?? "GET";
   const endpoint = path.split("?", 1)[0] || "/";
@@ -64,6 +64,7 @@ export async function callDealseApi<T>(
       headers: {
         Accept: "application/json",
         "X-Request-ID": requestId,
+        ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
       },

@@ -1,6 +1,6 @@
 import { App } from "../../../../prototype/src/App.jsx";
 import { logoutCustomer } from "./actions";
-import { reportDeal, searchMarketplaceDeals, toggleFavourite } from "./marketplace-actions";
+import { claimCustomerOffer, cancelCustomerClaim, reportDeal, searchMarketplaceDeals, toggleFavourite } from "./marketplace-actions";
 import { callDealseApi, type DealSeCategory, type DealSeMarketplaceDeal, type DealSeUser } from "../lib/dealse-api";
 import { toMarketplaceCard } from "../lib/marketplace-presenter";
 import { createSupabaseServerClient } from "../lib/supabase/server";
@@ -48,5 +48,5 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const rawDealId = Array.isArray(params.deal) ? params.deal[0] : params.deal;
   const activeDealId = rawDealId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawDealId) ? rawDealId : undefined;
   const { user, deals, categories, savedIds, marketplaceError } = await getHomeData(activeDealId);
-  return <App initialUser={user} initialDeals={deals} initialCategories={categories} initialSavedDealIds={savedIds} initialActiveDealId={activeDealId} initialMarketplaceError={marketplaceError} marketplaceReady onSearchDeals={searchMarketplaceDeals} onToggleFavourite={toggleFavourite} onReportDeal={reportDeal} onCustomerLogout={logoutCustomer} />;
+  return <App initialUser={user} initialDeals={deals} initialCategories={categories} initialSavedDealIds={savedIds} initialActiveDealId={activeDealId} initialMarketplaceError={marketplaceError} marketplaceReady onSearchDeals={searchMarketplaceDeals} onToggleFavourite={toggleFavourite} onReportDeal={reportDeal} onClaimCustomerOffer={claimCustomerOffer} onCancelCustomerClaim={cancelCustomerClaim} onCustomerLogout={logoutCustomer} />;
 }

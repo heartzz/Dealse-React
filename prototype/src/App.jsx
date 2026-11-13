@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import RetailerImagePicker from "../../apps/web/src/components/RetailerImagePicker.jsx";
 import { PublicMediaGallery } from "../../apps/web/src/components/PublicMediaGallery";
+import { CustomerRedemptionQr } from "../../apps/web/src/components/CustomerRedemptionQr";
+import { RetailerRedemptions } from "../../apps/web/src/components/RetailerRedemptions";
 import { normalizeOptionalOfferFields, optionalOfferPayload } from "./retailer-offer-form.js";
 import {
   ArrowRight, BookOpen, BookmarkSimple, CalendarBlank, CaretDown, Check, Coffee, Compass, Heart, House,
@@ -144,7 +146,7 @@ function RetailerWorkspace(props) {
 
 function RetailerMediaPicker(props) { return <RetailerImagePicker {...props} />; }
 
-function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = [], initialProducts = [], initialRetailerDeals = [], initialCategories = [], notificationCount = 0, onCreateStore, onUpdateStore, onCreateProduct, onUpdateProduct, onArchiveProduct, onCreateDeal, onUpdateDeal, onPublishDeal, onPauseDeal, onPreviewDeal, onSignOut }) {
+function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = [], initialProducts = [], initialRetailerDeals = [], initialCategories = [], notificationCount = 0, onCreateStore, onUpdateStore, onCreateProduct, onUpdateProduct, onArchiveProduct, onCreateDeal, onUpdateDeal, onPublishDeal, onPauseDeal, onPreviewDeal, onValidateRetailerRedemption, onConfirmRetailerRedemption, onLoadRetailerRedemptions, onSignOut }) {
   const [section, setSection] = useState(store?.hasStore ? "overview" : "store");
   const [stores, setStores] = useState(initialStores);
   const [products, setProducts] = useState(initialProducts);
@@ -161,12 +163,13 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
   const [dealStep, setDealStep] = useState(1);
   const [selectedStoreId, setSelectedStoreId] = useState(store?.id || initialStores[0]?.id || "");
   const [editingStoreId, setEditingStoreId] = useState(store?.id || initialStores[0]?.id || null);
+  const [locatingStore, setLocatingStore] = useState(false);
   const [productForm, setProductForm] = useState({ name: "", slug: "", description: "", brand: "", categoryId: initialCategories[0]?.id || "", storeId: store?.id || "" });
   const todayInIndia = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   const defaultExpiryInIndia = new Date(Date.now() + 7 * 86_400_000 + 330 * 60_000).toISOString().slice(0, 10);
   const blankDeal = { title: "", summary: "", details: "", terms: "", storeId: store?.id || initialStores[0]?.id || "", categoryId: store?.categoryId || initialCategories[0]?.id || "", offerType: "PERCENTAGE", discount: "20", discountAmount: "", originalPrice: "", offerPrice: "", startsAt: todayInIndia, endsAt: defaultExpiryInIndia, imageReference: "", productIds: [] };
   const [dealForm, setDealForm] = useState(blankDeal);
-  const [storeForm, setStoreForm] = useState({ name: store?.storeName || "", slug: store?.storeName?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "", description: store?.description || "", categoryId: store?.categoryId || initialCategories[0]?.id || "", addressLine1: store?.address || "", locality: store?.area || "", city: store?.city || "Ahmedabad", region: "Gujarat", countryCode: "IN", timezone: "Asia/Kolkata" });
+  const [storeForm, setStoreForm] = useState({ name: store?.storeName || "", slug: store?.storeName?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "", description: store?.description || "", categoryId: store?.categoryId || initialCategories[0]?.id || "", addressLine1: store?.address || "", locality: store?.area || "", city: store?.city || "Ahmedabad", region: "Gujarat", countryCode: "IN", timezone: "Asia/Kolkata", latitude: initialStores[0]?.latitude == null ? "" : String(initialStores[0].latitude), longitude: initialStores[0]?.longitude == null ? "" : String(initialStores[0].longitude) });
   const retailerId = store?.retailerId;
   const currentStore = stores.find((item) => item.id === selectedStoreId) || stores[0];
   const firstName = store?.ownerName?.split(" ")[0] || retailerSession?.ownerName?.split(" ")[0] || "there";
@@ -182,21 +185,43 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
   const saveStore = (event) => {
     event.preventDefault();
     run(async () => {
-      if (editingStoreId) await onUpdateStore(retailerId, editingStoreId, storeForm);
-      else await onCreateStore(retailerId, storeForm);
+      const latitude = storeForm.latitude === "" ? undefined : Number(storeForm.latitude);
+      const longitude = storeForm.longitude === "" ? undefined : Number(storeForm.longitude);
+      if ((latitude === undefined) !== (longitude === undefined)) throw new Error("Enter both latitude and longitude to save a map location.");
+      if (latitude !== undefined && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180)) throw new Error("Enter a valid latitude from -90 to 90 and longitude from -180 to 180.");
+      const input = { ...storeForm, latitude, longitude };
+      if (editingStoreId) await onUpdateStore(retailerId, editingStoreId, input);
+      else await onCreateStore(retailerId, input);
       window.location.reload();
     }, "Store profile saved.");
+  };
+  const captureStoreLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setError("Location access is unavailable in this browser. Enter latitude and longitude manually.");
+      return;
+    }
+    setError("");
+    setLocatingStore(true);
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      setStoreForm((previous) => ({ ...previous, latitude: coords.latitude.toFixed(6), longitude: coords.longitude.toFixed(6) }));
+      setLocatingStore(false);
+    }, (locationError) => {
+      setError(locationError.code === 1
+        ? "Location permission was denied. Allow location access or enter coordinates manually."
+        : "Could not get your location. Try again or enter coordinates manually.");
+      setLocatingStore(false);
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   };
   const selectStoreForEdit = (storeId) => {
     setSelectedStoreId(storeId);
     const selected = stores.find((item) => item.id === storeId);
     if (!selected) return;
     setEditingStoreId(storeId);
-    setStoreForm({ name: selected.name, slug: selected.slug, description: selected.description || "", categoryId: selected.categoryId || initialCategories[0]?.id || "", addressLine1: selected.addressLine1 || "", locality: selected.locality || "", city: selected.city, region: selected.region, countryCode: "IN", timezone: selected.timezone || "Asia/Kolkata" });
+    setStoreForm({ name: selected.name, slug: selected.slug, description: selected.description || "", categoryId: selected.categoryId || initialCategories[0]?.id || "", addressLine1: selected.addressLine1 || "", locality: selected.locality || "", city: selected.city, region: selected.region, countryCode: "IN", timezone: selected.timezone || "Asia/Kolkata", latitude: selected.latitude == null ? "" : String(selected.latitude), longitude: selected.longitude == null ? "" : String(selected.longitude) });
   };
   const startNewStore = () => {
     setEditingStoreId(null);
-    setStoreForm({ name: "", slug: "", description: "", categoryId: initialCategories[0]?.id || "", addressLine1: "", locality: "", city: "Ahmedabad", region: "Gujarat", countryCode: "IN", timezone: "Asia/Kolkata" });
+    setStoreForm({ name: "", slug: "", description: "", categoryId: initialCategories[0]?.id || "", addressLine1: "", locality: "", city: "Ahmedabad", region: "Gujarat", countryCode: "IN", timezone: "Asia/Kolkata", latitude: "", longitude: "" });
     setSection("store");
   };
   const saveProduct = (event) => {
@@ -325,23 +350,29 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
     <WorkspaceField label="Area / locality"><input value={storeForm.locality} onChange={(event) => setStoreForm({ ...storeForm, locality: event.target.value })} /></WorkspaceField>
     <WorkspaceField label="City" required><input required value={storeForm.city} onChange={(event) => setStoreForm({ ...storeForm, city: event.target.value })} /></WorkspaceField>
     <WorkspaceField label="State / region" required><input required value={storeForm.region} onChange={(event) => setStoreForm({ ...storeForm, region: event.target.value })} /></WorkspaceField>
+    <div className="workspace-form-grid-full"><p className="workspace-field-note">A street address does not set a map location. Add coordinates or use your current location; a map location is required before Admin can verify this store.</p><button type="button" className="workspace-secondary-button" onClick={captureStoreLocation} disabled={locatingStore}>{locatingStore ? "Getting location…" : "Use current location"}</button></div>
+    <WorkspaceField label="Latitude"><input type="number" inputMode="decimal" step="any" min="-90" max="90" placeholder="e.g. 23.0225" value={storeForm.latitude} onChange={(event) => setStoreForm({ ...storeForm, latitude: event.target.value })} /></WorkspaceField>
+    <WorkspaceField label="Longitude"><input type="number" inputMode="decimal" step="any" min="-180" max="180" placeholder="e.g. 72.5714" value={storeForm.longitude} onChange={(event) => setStoreForm({ ...storeForm, longitude: event.target.value })} /></WorkspaceField>
     <WorkspaceField label="Description" wide><textarea rows={4} value={storeForm.description} onChange={(event) => setStoreForm({ ...storeForm, description: event.target.value })} /></WorkspaceField>
     </div>{error && <p className="flow-error" role="alert">{error}</p>}{message && <p className="offer-idea-status" role="status">{message}</p>}<div className="workspace-form-actions"><button className="retailer-button retailer-button-primary" disabled={busy || !initialCategories.length}>{busy ? "Saving…" : "Save store profile"} <Check size={16} /></button></div></form></div></section></main>;
 
   const navTo = (key) => { setSection(key); setError(""); setMessage(""); };
   const startNewDeal = () => { if (section === "offers" && !editingDeal) { setDealStep(1); return; } setEditingDeal(null); setDealImage(""); setDealImages([]); setDealForm({ ...blankDeal, storeId: currentStore?.id || "" }); setDealStep(1); setDealPreview(null); setError(""); navTo("offers"); };
-  return <main className="retailer-workspace"><aside className="workspace-sidebar"><a className="workspace-brand" href="#workspace" onClick={(event) => event.preventDefault()}><img src="/assets/dealse-logo.png" alt="" /><span><strong>DealSe</strong><small>Retailer workspace</small></span></a><div className="workspace-store-chip"><span className="workspace-store-icon"><Storefront size={19} /></span><span><strong>{currentStore?.name || store.storeName}</strong><small>{currentStore?.locality || currentStore?.city || store.area}</small></span></div><nav aria-label="Retailer workspace">{[["overview", "Overview"], ["offers", "Offers"], ["products", "Products"], ["store", "Store profile"], ["account", "Account"]].map(([key, label]) => <button key={key} type="button" className={section === key ? "active" : ""} onClick={() => navTo(key)}><span className="workspace-nav-icon">{key === "offers" ? "◇" : key === "products" ? "▦" : key === "store" ? "▣" : key === "account" ? "◉" : "⌂"}</span>{label}{key === "offers" && <span className="workspace-nav-count">{offers.length}</span>}</button>)}</nav><div className="workspace-sidebar-bottom"><span className="workspace-preview-note"><i /> Connected to DealSe</span><button type="button" onClick={() => onSignOut?.()}>Log out <ArrowRight size={15} /></button></div></aside>
-    <section className="workspace-main"><header className="workspace-topbar"><div><span className="workspace-mobile-brand"><img src="/assets/dealse-logo.png" alt="" />DealSe</span><p>Retailer workspace <span>/</span> {section === "overview" ? "Overview" : section === "offers" ? "Offers" : section === "products" ? "Products" : section === "account" ? "Account" : "Store profile"}</p></div><a className="workspace-notification-link" href="/retailer/notifications">Notifications{notificationCount > 0 && <span>{notificationCount}</span>}</a><span className="workspace-top-status">CONNECTED</span></header><div className="workspace-content">
-      <div className="workspace-welcome"><div><p className="retailer-eyebrow"><span /> YOUR STORE WORKSPACE</p><h1>{section === "overview" ? `Welcome, ${firstName}.` : section === "offers" ? "Manage offers" : section === "products" ? "Manage products" : section === "account" ? "Your account" : "Store profile"}</h1><p>{section === "overview" ? "Create and publish offers customers can discover on DealSe." : section === "offers" ? "Prepare a deal, preview it, then publish it to the customer marketplace." : section === "products" ? "Add products that your offers can feature." : section === "account" ? "Your retailer identity and workspace access." : "Keep your public store information up to date."}</p></div>{section === "offers" && <button type="button" className="retailer-button retailer-button-primary" onClick={startNewDeal}>Create offer <ArrowRight size={15} /></button>}{section === "products" && editingProduct && <button type="button" className="retailer-button retailer-button-primary" onClick={() => { setEditingProduct(null); setProductForm({ ...productForm, name: "", slug: "", description: "", brand: "" }); }}>New product <ArrowRight size={15} /></button>}</div>
+  return <main className="retailer-workspace"><aside className="workspace-sidebar"><a className="workspace-brand" href="#workspace" onClick={(event) => event.preventDefault()}><img src="/assets/dealse-logo.png" alt="" /><span><strong>DealSe</strong><small>Retailer workspace</small></span></a><div className="workspace-store-chip"><span className="workspace-store-icon"><Storefront size={19} /></span><span><strong>{currentStore?.name || store.storeName}</strong><small>{currentStore?.locality || currentStore?.city || store.area}</small></span></div><nav aria-label="Retailer workspace">{[["overview", "Overview"], ["offers", "Offers"], ["products", "Products"], ["redemptions", "Redemptions"], ["store", "Store profile"], ["account", "Account"]].map(([key, label]) => <button key={key} type="button" className={section === key ? "active" : ""} onClick={() => navTo(key)}><span className="workspace-nav-icon">{key === "offers" ? "◇" : key === "products" ? "▦" : key === "redemptions" ? "▣" : key === "store" ? "▣" : key === "account" ? "◉" : "⌂"}</span>{label}{key === "offers" && <span className="workspace-nav-count">{offers.length}</span>}</button>)}</nav><div className="workspace-sidebar-bottom"><span className="workspace-preview-note"><i /> Connected to DealSe</span><button type="button" onClick={() => onSignOut?.()}>Log out <ArrowRight size={15} /></button></div></aside>
+    <section className="workspace-main"><header className="workspace-topbar"><div><span className="workspace-mobile-brand"><img src="/assets/dealse-logo.png" alt="" />DealSe</span><p>Retailer workspace <span>/</span> {section === "overview" ? "Overview" : section === "offers" ? "Offers" : section === "products" ? "Products" : section === "redemptions" ? "Redemptions" : section === "account" ? "Account" : "Store profile"}</p></div><a className="workspace-notification-link" href="/retailer/notifications">Notifications{notificationCount > 0 && <span>{notificationCount}</span>}</a><span className="workspace-top-status">CONNECTED</span></header><div className="workspace-content">
+      <div className="workspace-welcome"><div><p className="retailer-eyebrow"><span /> YOUR STORE WORKSPACE</p><h1>{section === "overview" ? `Welcome, ${firstName}.` : section === "offers" ? "Manage offers" : section === "products" ? "Manage products" : section === "redemptions" ? "Redemptions" : section === "account" ? "Your account" : "Store profile"}</h1><p>{section === "overview" ? "Create and publish offers customers can discover on DealSe." : section === "offers" ? "Prepare a deal, preview it, then publish it to the customer marketplace." : section === "products" ? "Add products that your offers can feature." : section === "redemptions" ? "Scan a customer QR, review the offer, then confirm redemption." : section === "account" ? "Your retailer identity and workspace access." : "Keep your public store information up to date."}</p></div>{section === "offers" && <button type="button" className="retailer-button retailer-button-primary" onClick={startNewDeal}>Create offer <ArrowRight size={15} /></button>}{section === "products" && editingProduct && <button type="button" className="retailer-button retailer-button-primary" onClick={() => { setEditingProduct(null); setProductForm({ ...productForm, name: "", slug: "", description: "", brand: "" }); }}>New product <ArrowRight size={15} /></button>}</div>
       {error && <p className="flow-error" role="alert">{error}</p>}{message && <p className="offer-idea-status" role="status">{message}</p>}
       {section === "overview" && <><div className="workspace-stat-grid"><article><span className="workspace-stat-icon"><CalendarBlank size={19} /></span><small>Total offers</small><strong>{offers.length}</strong><em>Saved to PostgreSQL</em></article><article><span className="workspace-stat-icon"><Storefront size={19} /></span><small>Products</small><strong>{products.length}</strong><em>In your catalogue</em></article><article><span className="workspace-stat-icon"><Check size={19} /></span><small>Published</small><strong>{offers.filter((item) => item.status === "published").length}</strong><em>Visible while valid</em></article></div><section className="workspace-panel workspace-offer-panel"><div className="workspace-panel-heading"><div><h2>Your latest offers</h2><p>Drafts and published offers persist in your DealSe account.</p></div><button type="button" onClick={() => setSection("offers")}>Manage offers <ArrowRight size={14} /></button></div>{offers.length ? <div className="workspace-offer-list">{offers.slice(0, 4).map((deal) => <article className="workspace-offer-row" key={deal.id}><img className="workspace-offer-thumb" src={deal.image} alt="" /><div><strong>{deal.title}</strong><p>{deal.description}</p><small>{deal.startDate} – {deal.endDate}</small></div><span className="workspace-draft-status">{deal.status}</span><button type="button" onClick={() => editDeal(deal)}>Edit</button></article>)}</div> : <div className="workspace-empty"><span><CalendarBlank size={22} /></span><h3>Start with your first offer</h3><p>Add a deal to make it available for customers to discover.</p><button type="button" className="retailer-button retailer-button-primary" onClick={() => setSection("offers")}>Create an offer <ArrowRight size={15} /></button></div>}</section></>}
+      {section === "redemptions" && (onValidateRetailerRedemption && onConfirmRetailerRedemption && onLoadRetailerRedemptions && retailerId && currentStore?.id
+        ? <RetailerRedemptions retailerId={retailerId} storeId={currentStore.id} storeName={currentStore.name} onValidate={onValidateRetailerRedemption} onConfirm={onConfirmRetailerRedemption} onLoadHistory={onLoadRetailerRedemptions} />
+        : <section className="workspace-panel retailer-redemption-error" role="alert">Redemption services are not available for this retailer workspace.</section>)}
       {section === "account" && <section className="workspace-panel workspace-profile-card"><span className="workspace-profile-avatar"><UserCircle size={28} /></span><div className="workspace-profile-main"><p className="retailer-eyebrow">RETAILER ACCOUNT</p><h2>{store.ownerName || firstName}</h2><p>{store.email || "Email not available"}</p><div className="workspace-profile-details"><div><small>Retailer</small><strong>{store.storeName || currentStore?.name}</strong></div><div><small>Current store</small><strong>{currentStore?.name || "No store selected"}</strong></div><div><small>Location</small><strong>{[currentStore?.locality, currentStore?.city].filter(Boolean).join(", ") || "Add a store location"}</strong></div></div><button className="workspace-secondary-button workspace-account-signout" type="button" onClick={() => onSignOut?.()}>Sign out</button></div></section>}
       {section === "store" && <>
         {stores.length > 0 && <section className="workspace-panel workspace-store-picker"><WorkspaceField label="Your stores"><select value={editingStoreId || "new"} onChange={(event) => event.target.value === "new" ? startNewStore() : selectStoreForEdit(event.target.value)}>{stores.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}<option value="new">Add another store…</option></select></WorkspaceField><p>{stores.length} store{stores.length === 1 ? "" : "s"} connected to this retailer profile.</p></section>}
         <form className="workspace-panel workspace-form-panel workspace-store-form" onSubmit={saveStore}>
           <div className="workspace-form-titlebar"><div><span className="workspace-form-step">STORE PROFILE</span><h2>{editingStoreId ? "Store information" : "Add a store"}</h2><p>Keep your public business details accurate and easy for local customers to find.</p></div><span className="workspace-store-logo-placeholder">{editingStoreId && currentStore?.image ? <img src={currentStore.image} alt={currentStore.imageAlt || currentStore.name} /> : <Storefront size={25} />}<small>Store profile</small></span></div>
           <section className="workspace-form-section"><div className="workspace-form-section-heading"><span>01</span><div><h3>Business details</h3><p>Your store name and category appear on customer offer cards.</p></div></div><div className="workspace-form-grid"><WorkspaceField label="Store name" required><input required minLength={2} maxLength={180} placeholder="Your store name" value={storeForm.name} onChange={(event) => setStoreForm({ ...storeForm, name: event.target.value, slug: event.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") })} /></WorkspaceField><WorkspaceField label="Category" required><select required value={storeForm.categoryId} onChange={(event) => setStoreForm({ ...storeForm, categoryId: event.target.value })}>{initialCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></WorkspaceField></div><RetailerMediaPicker label="Store logo and cover images" purpose="STORE" retailerId={retailerId} targetId={editingStoreId} images={editingStoreId ? currentStore?.images || [] : []} presets={[{ label: "Square store logo · 1:1", ratio: 1 }, { label: "Wide store cover · 16:9", ratio: 16 / 9 }]} altText={storeForm.name} onChange={(images) => setStores((previous) => previous.map((item) => { if (item.id !== editingStoreId) return item; const primary = images.find(({ isPrimary }) => isPrimary); return { ...item, images, image: primary?.url || null, imageAlt: primary?.altText || item.name }; }))} /></section>
-          <section className="workspace-form-section"><div className="workspace-form-section-heading"><span>02</span><div><h3>Store location</h3><p>Help customers understand where to visit.</p></div></div><div className="workspace-form-grid"><WorkspaceField label="Street address"><input maxLength={255} placeholder="Building, street, or road" value={storeForm.addressLine1} onChange={(event) => setStoreForm({ ...storeForm, addressLine1: event.target.value })} /></WorkspaceField><WorkspaceField label="Area or locality"><input maxLength={120} placeholder="Neighbourhood" value={storeForm.locality} onChange={(event) => setStoreForm({ ...storeForm, locality: event.target.value })} /></WorkspaceField><WorkspaceField label="City" required><input required maxLength={100} value={storeForm.city} onChange={(event) => setStoreForm({ ...storeForm, city: event.target.value })} /></WorkspaceField><WorkspaceField label="State or region" required><input required maxLength={100} value={storeForm.region} onChange={(event) => setStoreForm({ ...storeForm, region: event.target.value })} /></WorkspaceField></div></section>
+          <section className="workspace-form-section"><div className="workspace-form-section-heading"><span>02</span><div><h3>Store location</h3><p>Help customers understand where to visit.</p></div></div><div className="workspace-form-grid"><WorkspaceField label="Street address"><input maxLength={255} placeholder="Building, street, or road" value={storeForm.addressLine1} onChange={(event) => setStoreForm({ ...storeForm, addressLine1: event.target.value })} /></WorkspaceField><WorkspaceField label="Area or locality"><input maxLength={120} placeholder="Neighbourhood" value={storeForm.locality} onChange={(event) => setStoreForm({ ...storeForm, locality: event.target.value })} /></WorkspaceField><WorkspaceField label="City" required><input required maxLength={100} value={storeForm.city} onChange={(event) => setStoreForm({ ...storeForm, city: event.target.value })} /></WorkspaceField><WorkspaceField label="State or region" required><input required maxLength={100} value={storeForm.region} onChange={(event) => setStoreForm({ ...storeForm, region: event.target.value })} /></WorkspaceField><div className="workspace-form-grid-full"><p className="workspace-field-note">A street address does not set a map location. Add coordinates or use your current location; a map location is required before Admin can verify this store.</p><button type="button" className="workspace-secondary-button" onClick={captureStoreLocation} disabled={locatingStore}>{locatingStore ? "Getting location…" : "Use current location"}</button></div><WorkspaceField label="Latitude"><input type="number" inputMode="decimal" step="any" min="-90" max="90" placeholder="e.g. 23.0225" value={storeForm.latitude} onChange={(event) => setStoreForm({ ...storeForm, latitude: event.target.value })} /></WorkspaceField><WorkspaceField label="Longitude"><input type="number" inputMode="decimal" step="any" min="-180" max="180" placeholder="e.g. 72.5714" value={storeForm.longitude} onChange={(event) => setStoreForm({ ...storeForm, longitude: event.target.value })} /></WorkspaceField></div></section>
           <section className="workspace-form-section"><div className="workspace-form-section-heading"><span>03</span><div><h3>About your store</h3><p>Share a short introduction customers can read before visiting.</p></div></div><div className="workspace-form-grid"><WorkspaceField label="Store description" wide><textarea rows={4} maxLength={2000} placeholder="What makes your store useful to customers nearby?" value={storeForm.description} onChange={(event) => setStoreForm({ ...storeForm, description: event.target.value })} /></WorkspaceField></div></section>
           <div className="workspace-form-actions"><span className="workspace-form-actions-spacer" /><button className="retailer-button retailer-button-primary" disabled={busy || !initialCategories.length}>{busy ? "Saving…" : editingStoreId ? "Save store changes" : "Create store profile"} <Check size={16} /></button></div>
         </form>
@@ -371,7 +402,7 @@ function RetailerMarketplaceWorkspace({ store, retailerSession, initialStores = 
         </form>        {dealPreview && <section className="workspace-panel workspace-customer-preview"><div className="workspace-preview-heading"><div><p className="retailer-eyebrow"><span /> CUSTOMER PREVIEW</p><h2>This is how the offer appears</h2></div><button type="button" className="workspace-secondary-button" onClick={() => setDealPreview(null)}>Close preview</button></div><div className="workspace-preview-layout"><article className="workspace-marketplace-card"><div className="workspace-marketplace-image"><img src={dealPreview.image || dealPreview.imageReference || suggestedOfferImage(categoryName(dealPreview.categoryId), dealPreview.title).src} alt={dealPreview.title || "Offer artwork"} /><span>{String(dealPreview.offerType || dealForm.offerType).toUpperCase() === "PERCENTAGE" ? `${Number(dealPreview.discountBps || Number(dealForm.discount) * 100) / 100}% OFF` : String(dealPreview.offerType || dealForm.offerType).toUpperCase() === "FIXED_AMOUNT" ? `₹${Number(dealPreview.discountAmountMinor || Number(dealForm.discountAmount) * 100) / 100} OFF` : "SPECIAL OFFER"}</span></div><div className="workspace-marketplace-content"><div className="workspace-preview-store-brand"><span><Storefront size={16} /></span><div><strong>{dealPreview.store?.name || dealPreview.storeName || currentStore?.name || store?.storeName}</strong><small>{dealPreview.category?.name || categoryName(dealPreview.categoryId)}</small></div></div><h3>{dealPreview.title || "Your offer title"}</h3><p>{dealPreview.summary || dealPreview.description || dealPreview.details || "Add a short description so customers know what is included."}</p><div className="workspace-preview-prices">{(dealPreview.originalPriceMinor || dealForm.originalPrice) && <del>₹{Number(dealPreview.originalPriceMinor || Number(dealForm.originalPrice) * 100) / 100}</del>}{(dealPreview.offerPriceMinor || dealForm.offerPrice) && <strong>₹{Number(dealPreview.offerPriceMinor || Number(dealForm.offerPrice) * 100) / 100}</strong>}<span>{dealPreview.category?.name || categoryName(dealPreview.categoryId)}</span></div><div className="workspace-preview-dates"><CalendarBlank size={15} />{(dealPreview.startsAt || dealPreview.startDate || dealForm.startsAt)?.slice(0, 10)} – {(dealPreview.endsAt || dealPreview.endDate || dealForm.endsAt)?.slice(0, 10)}</div></div></article><aside className="workspace-preview-terms"><h3>Offer details</h3><p>{dealPreview.details || dealPreview.summary || dealForm.details || dealForm.summary || "More offer details will appear here."}</p><h4>Terms and conditions</h4><p>{dealPreview.terms || dealForm.terms || "Your offer terms will appear here."}</p><div><span>Offer status</span><strong>{dealPreview.status || "Draft preview"}</strong></div></aside></div></section>}
         <section className="workspace-panel workspace-offer-panel"><div className="workspace-panel-heading"><div><h2>Your offers</h2><p>Draft, publish, or pause offers from your catalogue.</p></div></div>{offers.length ? offers.map((deal) => <article className="workspace-offer-row" key={deal.id}><img className="workspace-offer-thumb" src={deal.image || suggestedOfferImage(deal.category || "", deal.title).src} alt="" /><div><strong>{deal.title}</strong><p>{deal.description || deal.summary}</p><small>{deal.startDate || deal.startsAt?.slice(0, 10)} – {deal.endDate || deal.endsAt?.slice(0, 10)}</small></div><span className="workspace-draft-status">{deal.status}</span><button type="button" onClick={() => editDeal(deal)}>Edit</button><button type="button" onClick={() => preview(deal)} disabled={busy}>Preview</button>{deal.status === "published" ? <button type="button" onClick={() => pause(deal)} disabled={busy}>Pause</button> : deal.status !== "ended" && <button type="button" onClick={() => publish(deal)} disabled={busy}>Publish</button>}</article>) : <div className="workspace-empty"><h3>No deals yet</h3><p>Your saved drafts and published offers will appear here.</p></div>}</section>
       </>}
-    </div></section><nav className="workspace-mobile-nav" aria-label="Retailer mobile navigation"><button type="button" className={section === "overview" ? "active" : ""} onClick={() => navTo("overview")}><span>⌂</span>Home</button><button type="button" className={section === "offers" ? "active" : ""} onClick={() => navTo("offers")}><span>◇</span>Offers</button><button type="button" className="workspace-mobile-create" onClick={startNewDeal}><span>＋</span>Create</button><button type="button" className={section === "products" ? "active" : ""} onClick={() => navTo("products")}><span>▦</span>Products</button><button type="button" className={section === "store" ? "active" : ""} onClick={() => navTo("store")}><span>▣</span>Store</button><button type="button" className={section === "account" ? "active" : ""} onClick={() => navTo("account")}><span>◉</span>Account</button></nav>{dealPreview && <div className="toast" role="status"><Check size={16} /> Preview loaded</div>}</main>;
+    </div></section><nav className="workspace-mobile-nav" aria-label="Retailer mobile navigation"><button type="button" className={section === "overview" ? "active" : ""} onClick={() => navTo("overview")}><span>⌂</span>Home</button><button type="button" className={section === "offers" ? "active" : ""} onClick={() => navTo("offers")}><span>◇</span>Offers</button><button type="button" className={section === "redemptions" ? "active" : ""} onClick={() => navTo("redemptions")}><span>▣</span>Redeem</button><button type="button" className="workspace-mobile-create" onClick={startNewDeal}><span>＋</span>Create</button><button type="button" className={section === "products" ? "active" : ""} onClick={() => navTo("products")}><span>▦</span>Products</button><button type="button" className={section === "store" ? "active" : ""} onClick={() => navTo("store")}><span>▣</span>Store</button><button type="button" className={section === "account" ? "active" : ""} onClick={() => navTo("account")}><span>◉</span>Account</button></nav>{dealPreview && <div className="toast" role="status"><Check size={16} /> Preview loaded</div>}</main>;
 }
 
 function RetailerWorkspacePreview({ store, retailerSession, redemptions = [], onCompleteRedemption = () => {}, onExit, onSignOut, onOpenQrScanner }) {
@@ -704,6 +735,8 @@ function CustomerAccountPage({ view, user, savedCount, customerOffers = [], onBa
  *   marketplaceReady?: boolean,
  *   onSearchDeals?: (...args: any[]) => Promise<any[]>,
  *   onToggleFavourite?: (...args: any[]) => Promise<any>,
+ *   onClaimCustomerOffer?: (dealId: string) => Promise<{ claim: { id: string, status: string, expiresAt: string, credential?: string }, replayed: boolean }>,
+ *   onCancelCustomerClaim?: (claimId: string) => Promise<any>,
  *   onReportDeal?: (...args: any[]) => Promise<any>,
  *   onCreateStore?: (...args: any[]) => Promise<any>,
  *   onUpdateStore?: (...args: any[]) => Promise<any>,
@@ -715,11 +748,14 @@ function CustomerAccountPage({ view, user, savedCount, customerOffers = [], onBa
  *   onPublishDeal?: (...args: any[]) => Promise<any>,
  *   onPauseDeal?: (...args: any[]) => Promise<any>,
  *   onPreviewDeal?: (...args: any[]) => Promise<any>,
+ *   onValidateRetailerRedemption?: (...args: any[]) => Promise<any>,
+ *   onConfirmRetailerRedemption?: (...args: any[]) => Promise<any>,
+ *   onLoadRetailerRedemptions?: (...args: any[]) => Promise<any>,
  *   onCustomerLogout?: () => Promise<void>,
  *   onRetailerLogout?: () => Promise<void>
  * }} props
  */
-export function App({ mode = "customer", initialUser = null, initialRetailer = null, initialDeals = null, initialCategories = null, initialSavedDealIds = [], initialActiveDealId = "", initialMarketplaceError = "", initialStores = [], initialProducts = [], initialRetailerDeals = [], initialNotificationCount = 0, marketplaceReady = false, onSearchDeals, onToggleFavourite, onReportDeal, onCreateStore, onUpdateStore, onCreateProduct, onUpdateProduct, onArchiveProduct, onCreateDeal, onUpdateDeal, onPublishDeal, onPauseDeal, onPreviewDeal, onCustomerLogout, onRetailerLogout }) {
+export function App({ mode = "customer", initialUser = null, initialRetailer = null, initialDeals = null, initialCategories = null, initialSavedDealIds = [], initialActiveDealId = "", initialMarketplaceError = "", initialStores = [], initialProducts = [], initialRetailerDeals = [], initialNotificationCount = 0, marketplaceReady = false, onSearchDeals, onToggleFavourite, onReportDeal, onClaimCustomerOffer, onCancelCustomerClaim, onCreateStore, onUpdateStore, onCreateProduct, onUpdateProduct, onArchiveProduct, onCreateDeal, onUpdateDeal, onPublishDeal, onPauseDeal, onPreviewDeal, onValidateRetailerRedemption, onConfirmRetailerRedemption, onLoadRetailerRedemptions, onCustomerLogout, onRetailerLogout }) {
   const [city, setCity] = useState("Ahmedabad");
   const [nearbyLocation, setNearbyLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -743,6 +779,7 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
   const storeCloseRef = useRef(null);
   const storeDialogRef = useRef(null);
   const [redeem, setRedeem] = useState(null);
+  const [redemptionNow, setRedemptionNow] = useState(() => Date.now());
   const [redemptions, setRedemptions] = useState([]);
   const [customerOffers, setCustomerOffers] = useState([]);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -761,6 +798,18 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
     setReportReason("inappropriate");
     setReportDetails("");
   }, [activeDeal?.id]);
+
+  useEffect(() => {
+    if (!redeem?.expiresAt || !["active", "unrecoverable"].includes(redeem.status)) return undefined;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setRedemptionNow(now);
+      setRedeem((current) => current?.expiresAt && new Date(current.expiresAt).getTime() <= now
+        ? { ...current, credential: undefined, status: "expired" }
+        : current);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [redeem?.expiresAt, redeem?.status]);
 
   const [retailerWorkspace, setRetailerWorkspace] = useState(initialRetailer);
 
@@ -1036,10 +1085,32 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
     setRedemptionMessage("QR code captured. Check it to confirm the customer offer.");
     stopQrScanner();
   };
-  const issueOfferCode = () => {
+  const issueOfferCode = async () => {
     if (!activeDeal) return;
     if (!customerUser) {
       window.location.assign("/customer/login");
+      return;
+    }
+    if (onClaimCustomerOffer) {
+      const details = {
+        offerTitle: activeDeal.title || activeDeal.offer,
+        storeName: activeDeal.store,
+        expiresAt: activeDeal.endsAt || null,
+      };
+      setRedeem({ ...details, status: "loading" });
+      try {
+        const response = await onClaimCustomerOffer(activeDeal.id);
+        const claim = response.claim;
+        setRedeem({
+          ...details,
+          claimId: claim.id,
+          expiresAt: claim.expiresAt,
+          status: claim.credential ? "active" : "unrecoverable",
+          credential: claim.credential,
+        });
+      } catch (error) {
+        setRedeem({ ...details, status: "error", message: error?.message || "We couldn’t create your QR code. Check your connection and try again." });
+      }
       return;
     }
     const customer = customerUser;
@@ -1063,6 +1134,19 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
     setCustomerOffers((current) => [{ ...linkRecord, status: "active" }, ...current.filter((item) => item.code !== linkRecord.code)]);
     setRedeem({ ...linkRecord, qrPayload: linkRecord.qrPayload });
   };
+  const cancelCustomerOfferClaim = async () => {
+    if (!redeem?.claimId || !onCancelCustomerClaim) return;
+    setRedeem((current) => ({ ...current, cancelling: true, cancelError: "" }));
+    try {
+      await onCancelCustomerClaim(redeem.claimId);
+      setRedeem((current) => ({ ...current, credential: undefined, status: "cancelled", cancelling: false }));
+    } catch (error) {
+      setRedeem((current) => ({ ...current, cancelling: false, cancelError: error?.message || "We couldn’t cancel this claim. Check your connection and retry." }));
+    }
+  };
+  const closeRedemptionDialog = () => setRedeem(null);
+  const redemptionSeconds = redeem?.expiresAt ? Math.max(0, Math.ceil((new Date(redeem.expiresAt).getTime() - redemptionNow) / 1000)) : 0;
+  const redemptionCountdown = `${String(Math.floor(redemptionSeconds / 60)).padStart(2, "0")}:${String(redemptionSeconds % 60).padStart(2, "0")}`;
   const completeOfferCode = (code) => {
     setRedemptions((current) => current.map((item) => item.code === code && item.status === "unused" ? { ...item, status: "redeemed", redeemedAt: new Date().toISOString() } : item));
     setCustomerOffers((current) => current.filter((item) => item.code !== code));
@@ -1088,9 +1172,9 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
     return result;
   };
   const copyOfferCode = async () => {
-    if (!redeem?.code) return;
-    try { await navigator.clipboard.writeText(redeem.code); notify("Offer code copied"); }
-    catch { notify("Select the code to copy it"); }
+    if (onClaimCustomerOffer || !redeem?.code) return;
+    try { await navigator.clipboard.writeText(redeem.code); notify("Preview code copied"); }
+    catch { notify("Select the preview code to copy it"); }
   };
   const scrollTo = (id) => { setMenuOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); };
 
@@ -1132,7 +1216,7 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
           <div className="detail-actions"><button className="button button--primary" type="button" onClick={issueOfferCode}>Redeem this offer <QrCode size={17} /></button><button className="button button--outline" type="button" onClick={() => toggleSave(activeDeal.id)} aria-pressed={saved.has(activeDeal.id)}><Heart size={16} weight={saved.has(activeDeal.id) ? "fill" : "regular"} /> {saved.has(activeDeal.id) ? "Saved" : "Save offer"}</button>{marketplaceReady && activeDeal.id && activeDeal.slug && <a className="button button--outline" href={`/deals/${encodeURIComponent(activeDeal.id)}/${encodeURIComponent(activeDeal.slug)}`}>Full offer details <ArrowRight size={15} /></a>}</div>
         </section>
       </main>
-    ) : retailerView ? retailerWorkspace ? <RetailerWorkspace store={retailerWorkspace} retailerSession={retailerSession} initialStores={initialStores} initialProducts={initialProducts} initialRetailerDeals={initialRetailerDeals} initialCategories={initialCategories || categories} notificationCount={initialNotificationCount} onCreateStore={onCreateStore} onUpdateStore={onUpdateStore} onCreateProduct={onCreateProduct} onUpdateProduct={onUpdateProduct} onArchiveProduct={onArchiveProduct} onCreateDeal={onCreateDeal} onUpdateDeal={onUpdateDeal} onPublishDeal={onPublishDeal} onPauseDeal={onPauseDeal} onPreviewDeal={onPreviewDeal} onSignOut={() => onRetailerLogout?.()} onExit={() => { setRetailerView(false); window.location.assign("/"); }} /> : <RetailerPage onGetStarted={() => window.location.assign(initialUser?.roles?.includes("retailer") ? "/retailer/dashboard" : "/retailer/register")} onLogin={() => window.location.assign(initialUser?.roles?.includes("retailer") ? "/retailer/dashboard" : "/retailer/login")} /> : <main id="top" className="customer-main">
+    ) : retailerView ? retailerWorkspace ? <RetailerWorkspace store={retailerWorkspace} retailerSession={retailerSession} initialStores={initialStores} initialProducts={initialProducts} initialRetailerDeals={initialRetailerDeals} initialCategories={initialCategories || categories} notificationCount={initialNotificationCount} onCreateStore={onCreateStore} onUpdateStore={onUpdateStore} onCreateProduct={onCreateProduct} onUpdateProduct={onUpdateProduct} onArchiveProduct={onArchiveProduct} onCreateDeal={onCreateDeal} onUpdateDeal={onUpdateDeal} onPublishDeal={onPublishDeal} onPauseDeal={onPauseDeal} onPreviewDeal={onPreviewDeal} onValidateRetailerRedemption={onValidateRetailerRedemption} onConfirmRetailerRedemption={onConfirmRetailerRedemption} onLoadRetailerRedemptions={onLoadRetailerRedemptions} onSignOut={() => onRetailerLogout?.()} onExit={() => { setRetailerView(false); window.location.assign("/"); }} /> : <RetailerPage onGetStarted={() => window.location.assign(initialUser?.roles?.includes("retailer") ? "/retailer/dashboard" : "/retailer/register")} onLogin={() => window.location.assign(initialUser?.roles?.includes("retailer") ? "/retailer/dashboard" : "/retailer/login")} /> : <main id="top" className="customer-main">
       <section className="hero content-wrap"><div className="hero-copy"><p className="eyebrow">Ahmedabad’s local deals marketplace</p><h1>Good offers<br />from great<br /><em>local stores.</em></h1><p className="hero-intro">Discover independent stores, great offers and unique finds across your neighbourhood.</p><form className="hero-search" onSubmit={(e) => { e.preventDefault(); scrollTo("deals"); }}><label><MapPin size={15} weight="fill" /><span className="sr-only">Choose city</span><select value={city} onChange={(e) => { setCity(e.target.value); setNearbyLocation(null); }}>{cities.map((c) => <option key={c}>{c}</option>)}</select><CaretDown size={12} /></label><MagnifyingGlass size={16} /><input aria-label="Search a local store or offer" placeholder="Search for a store, product or offer" value={query} onChange={(e) => setQuery(e.target.value)} /><button type="submit">Explore deals <ArrowRight size={16} /></button></form></div><div className="hero-collage"><figure className="hero-main-photo"><img src="/assets/hero-shopkeeper.png" alt="A shopkeeper welcoming a customer at a neighborhood store" /></figure><figure className="hero-top-photo"><img src="/assets/hero-textiles.png" alt="A customer browsing textiles in a local boutique" /></figure><div className="hero-note"><span>Local stores</span><strong>Stronger Ahmedabad</strong></div><figure className="hero-bottom-photo"><img src="/assets/deal-garden.png" alt="A local plant shop" /></figure></div>{mobileHeroDeals.length > 0 && <div className="mobile-promo-carousel" role="region" aria-label="Featured local offers">{mobileHeroDeals.map((deal) => <button key={"mobile-hero-"+deal.id} className="mobile-promo-card" type="button" onClick={() => { setActiveDeal(deal); window.scrollTo({ top: 0, behavior: "smooth" }); }}><img src={deal.image} alt={deal.alt || ""} loading="lazy" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = deal.fallbackImage || "/assets/hero-shopkeeper.png"; }} /><span className="mobile-promo-shade" /><span className="mobile-promo-badge">{deal.offer}</span><span className="mobile-promo-copy"><strong>{deal.title}</strong><small>{deal.store} · {deal.area}</small></span></button>)}</div>}</section>
       {demoCatalogue && <aside className="demo-catalogue-note" aria-label="Demo catalogue notice"><strong>DEMO CATALOGUE</strong><span>These fictional retailers and offers are for product evaluation only.</span></aside>}
       {marketplaceReady && spotlightDeals.length > 0 && <section className="spotlight-section content-wrap" aria-labelledby="spotlight-title"><div className="section-head"><div><p className="eyebrow">Fresh from Ahmedabad</p><h2 id="spotlight-title">Trending deals</h2><p className="section-subtitle">A few good finds to start with</p></div><button className="text-link" type="button" onClick={() => scrollTo("deals")}>Explore all deals <ArrowRight size={14} /></button></div><div className="spotlight-grid">{spotlightDeals.map((deal) => <button className="spotlight-card" key={"spotlight-"+deal.id} type="button" onClick={() => { setActiveDeal(deal); window.scrollTo({ top: 0, behavior: "smooth" }); }}><img src={deal.image} alt={deal.alt} loading="lazy" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = deal.fallbackImage || "/assets/hero-shopkeeper.png"; }} /><span className="spotlight-shade" /><span className="spotlight-offer">{deal.offer}</span><span className="spotlight-copy"><strong>{deal.title}</strong><small>{deal.store} · {deal.area}</small></span></button>)}</div></section>}
@@ -1153,7 +1237,34 @@ export function App({ mode = "customer", initialUser = null, initialRetailer = n
       <button type="button" className={mobileTab === "profile" ? "is-active" : ""} aria-current={mobileTab === "profile" ? "page" : undefined} onClick={() => { setMobileTab("profile"); if (marketplaceReady && customerUser) window.location.assign("/customer/dashboard"); else if (customerUser) { setCustomerAccountPage("profile"); window.scrollTo({ top: 0, behavior: "smooth" }); } else window.location.assign("/customer/login"); }}><UserCircle size={21} weight={mobileTab === "profile" ? "fill" : "regular"} /><span>Profile</span></button>
     </nav>}    <footer className={`site-footer ${retailerWorkspace ? "site-footer-hidden" : ""}`}><div className="content-wrap footer-inner"><a className="brand brand-footer" href="#top" onClick={(e) => { e.preventDefault(); setRetailerView(false); setCustomerAccountPage(null); }}><img src="/assets/dealse-logo.png" alt="" /><span><strong>DealSe</strong><small>Good Local Finds</small></span></a><span>Discover good things close to home.</span><button type="button" onClick={() => { setRetailerView(true); setCustomerAccountPage(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}>For stores <ArrowRight size={13} /></button></div></footer>
     {activeStore && <Dialog title={activeStore.store} close={() => setActiveStore(null)} className="customer-store-dialog" dialogRef={storeDialogRef} closeRef={storeCloseRef}><div className="customer-store-overview"><img src={activeStore.image} alt="" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = activeStore.fallbackImage || "/assets/hero-shopkeeper.png"; }} /><div><p className="eyebrow">{activeStore.category}</p><p><MapPin size={15} weight="fill" /> {activeStore.area}</p><small>{activeStore.offerCount} current {activeStore.offerCount === 1 ? "offer" : "offers"}</small>{activeStore.storeId && activeStore.storeSlug ? <a className="customer-store-page-link" href={`/stores/${encodeURIComponent(activeStore.storeId)}/${encodeURIComponent(activeStore.storeSlug)}`}>View store profile <ArrowRight size={14} /></a> : null}</div></div><h3>Offers from this store</h3><div className="customer-store-offers">{deals.filter((deal) => deal.storeId ? deal.storeId === activeStore.storeId : deal.store === activeStore.store).map((deal) => <DealCard key={"store-offer-"+deal.id} deal={deal} saved={saved.has(deal.id)} onSave={toggleSave} onOpen={(item) => { setActiveStore(null); setActiveDeal(item); }} />)}</div></Dialog>}
-    {redeem && activeDeal && <Dialog title="Your offer code" close={() => setRedeem(null)} className="redeem-dialog"><p>Show this one-time code to the shopkeeper. They’ll check the offer and confirm it at the counter.</p><div className="redeem-code-card"><span>DEALSE PREVIEW CODE</span><strong>{redeem.code}</strong></div><button type="button" className="button button--outline redeem-copy-button" onClick={copyOfferCode}>Copy code</button><div className="redeem-store"><span>{redeem.storeName}</span><strong>{redeem.offerTitle}</strong></div><small className="sample-note">Preview only: this code can be verified in the matching retailer workspace during this page session. No live QR scanner or backend verification is connected.</small></Dialog>}
+    {redeem && activeDeal && <Dialog title={onClaimCustomerOffer ? "Your redemption QR" : "Your offer code"} close={closeRedemptionDialog} className="redeem-dialog">
+      {redeem.status === "loading" && <p role="status">Creating your secure QR code…</p>}
+      {redeem.status === "error" && <><p role="alert">{redeem.message}</p><button type="button" className="button button--primary" onClick={issueOfferCode}>Try again</button></>}
+      {redeem.status === "active" && redeem.credential && <>
+        <div className="customer-redemption-identity"><strong>{redeem.offerTitle}</strong><span>{redeem.storeName}</span></div>
+        <CustomerRedemptionQr credential={redeem.credential} />
+        <p className="customer-redemption-instructions">Show this QR to the retailer. They’ll check the offer and confirm it at checkout.</p>
+        <div className="customer-redemption-expiry"><span>Expires in <strong aria-live="off">{redemptionCountdown}</strong></span><small>Valid until {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(redeem.expiresAt))}</small></div>
+        <small className="customer-redemption-notice">This QR is shown once and stays only in this open dialog. If you close it or lose it, you can request a new QR after this one expires.</small>
+      </>}
+      {redeem.status === "unrecoverable" && <>
+        <div className="customer-redemption-identity"><strong>{redeem.offerTitle}</strong><span>{redeem.storeName}</span></div>
+        <p role="status">A claim is already active for this offer, but its QR was shown only when it was issued. We can’t retrieve that credential again.</p>
+        <p className="customer-redemption-instructions">If you still have the original QR, show it to the retailer before it expires. Otherwise, wait for the expiry below, then request a new QR.</p>
+        <div className="customer-redemption-expiry"><span>Time remaining <strong aria-live="off">{redemptionCountdown}</strong></span><small>Expires {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(redeem.expiresAt))}</small></div>
+        <a className="button button--outline customer-claims-link" href="/customer/dashboard#redemption-claims">View your claims</a>
+        {redeem.claimId && onCancelCustomerClaim && <button type="button" className="button button--outline customer-claim-cancel" onClick={cancelCustomerOfferClaim} disabled={redeem.cancelling}>{redeem.cancelling ? "Cancelling…" : "Cancel this claim"}</button>}
+      </>}
+      {redeem.status === "expired" && <>
+        <p role="status">This QR has expired and can no longer be redeemed.</p>
+        <p className="customer-redemption-instructions">You can request a new QR while this offer is still available.</p>
+        <button type="button" className="button button--primary" onClick={issueOfferCode}>Request a new QR</button>
+      </>}
+      {redeem.status === "cancelled" && <p role="status">This claim was cancelled. Its QR is no longer valid.</p>}
+      {redeem.status === "active" && redeem.credential && redeem.claimId && onCancelCustomerClaim && <button type="button" className="button button--outline customer-claim-cancel" onClick={cancelCustomerOfferClaim} disabled={redeem.cancelling}>{redeem.cancelling ? "Cancelling…" : "Cancel claim"}</button>}
+      {redeem.cancelError && <p className="customer-redemption-error" role="alert">{redeem.cancelError}</p>}
+      {!onClaimCustomerOffer && redeem.code && <><div className="redeem-code-card"><span>DEALSE PREVIEW CODE</span><strong>{redeem.code}</strong></div><button type="button" className="button button--outline redeem-copy-button" onClick={copyOfferCode}>Copy preview code</button><div className="redeem-store"><span>{redeem.storeName}</span><strong>{redeem.offerTitle}</strong></div><small className="sample-note">Preview only: this code is not redeemable.</small></>}
+    </Dialog>}
     {scannerOpen && <Dialog title="Scan customer QR code" close={stopQrScanner} className="qr-scanner-dialog"><div className="qr-scanner-shell"><video ref={scannerVideoRef} className="qr-scanner-video" autoPlay muted playsInline />{scannerMessage && <p className="workspace-redeem-message" role="status">{scannerMessage}</p>}<div className="qr-scanner-actions"><button type="button" className="retailer-button retailer-button-primary" onClick={readQrFromCamera}>Read QR</button><button type="button" className="button button--outline" onClick={() => scannerFileInputRef.current?.click()}>Use QR image</button><button type="button" className="button button--outline" onClick={useScannedCode} disabled={!scannerResult}>Use scanned code</button></div>{scannerResult && <div className="redeem-code-card"><span>CAPTURED CODE</span><strong>{scannerResult}</strong></div>}<input ref={scannerFileInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleScannerImage} /></div></Dialog>}
     {toast && <div className="toast" role="status"><Check size={16} weight="bold" /> {toast}</div>}
   </div>;

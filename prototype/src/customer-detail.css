@@ -443,6 +443,35 @@
   opacity: .65;
 }
 
+.dialog.redeem-dialog {
+  width: min(100%, 390px);
+  max-height: min(92dvh, 760px);
+  overflow-y: auto;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 26px 22px 22px;
+}
+.dialog.redeem-dialog > p { margin: 0; }
+.customer-redemption-identity { width: 100%; display: grid; gap: 4px; text-align: center; }
+.customer-redemption-identity strong { color: #20262a; font-size: 15px; line-height: 1.35; }
+.customer-redemption-identity span { color: #73797d; font-size: 12px; }
+.customer-redemption-qr { display: block; width: min(100%, 244px); height: auto; aspect-ratio: 1; padding: 8px; border: 1px solid #e8ecee; border-radius: 10px; background: #fff; }
+.customer-redemption-instructions { max-width: 300px; color: #555e62; font-size: 12px; line-height: 1.55; }
+.customer-redemption-expiry { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 12px; padding: 10px 12px; border-radius: 9px; background: #fff4f8; color: #596269; font-size: 12px; text-align: left; }
+.customer-redemption-expiry strong { color: #c92f68; font-variant-numeric: tabular-nums; }
+.customer-redemption-expiry small { color: #73797d; font-size: 10px; }
+.customer-redemption-notice { color: #73797d; font-size: 10px; line-height: 1.55; text-align: left; }
+.customer-claims-link { text-decoration: none; }
+.customer-claim-cancel { min-height: 40px; }
+.customer-claim-cancel:disabled { cursor: wait; opacity: .65; }
+.customer-redemption-error { color: #9f2d25 !important; font-size: 11px !important; }
+
+@media (max-width: 420px) {
+  .dialog.redeem-dialog { padding: 24px 17px 18px; }
+  .customer-redemption-qr { width: min(100%, 218px); }
+}
+
 @media (max-width: 540px) {
   .detail-wrap.customer-offer-modal .detail-report-area { padding: 10px 0 2px; }
 }

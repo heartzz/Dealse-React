@@ -9,9 +9,10 @@ import { FavouritesModule } from "./favourites/favourites.module.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { MediaModule } from "./media/media.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
+import { RedemptionsModule } from "./redemptions/redemptions.module.js";
 
 @Module({
-  imports: [DatabaseModule, AuthModule, RetailersModule, ProductsModule, DealsModule, FavouritesModule, AdminModule, MediaModule, NotificationsModule],
+  imports: [DatabaseModule, AuthModule, RetailersModule, ProductsModule, DealsModule, FavouritesModule, AdminModule, MediaModule, NotificationsModule, RedemptionsModule],
   controllers: [AppController],
 })
 export class AppModule {}

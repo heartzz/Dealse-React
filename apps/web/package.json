@@ -16,10 +16,12 @@
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.0",
+    "@zxing/browser": "0.2.1",
     "cropperjs": "2.3.1",
     "next": "^16.3.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "toqr": "0.1.1"
   },
   "devDependencies": {
     "@dealse/config-typescript": "workspace:*",

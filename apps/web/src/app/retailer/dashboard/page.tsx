@@ -3,7 +3,7 @@ import { App } from "../../../../../../prototype/src/App.jsx";
 import { logoutRetailer } from "../../actions";
 import { callDealseApi, type DealSeRetailer, type DealSeUser } from "../../../lib/dealse-api";
 import { requireWebSession } from "../../../lib/auth-session";
-import { createStore, updateStore, createProduct, updateProduct, archiveProduct, createDeal, updateDeal, publishDeal, pauseDeal, previewDeal } from "../../marketplace-actions";
+import { createStore, updateStore, createProduct, updateProduct, archiveProduct, createDeal, updateDeal, publishDeal, pauseDeal, previewDeal, validateRetailerRedemptionCredential, confirmRetailerRedemptionCredential, getRetailerRedemptionHistory } from "../../marketplace-actions";
 import { toMarketplaceCard } from "../../../lib/marketplace-presenter";
 import type { DealSeCategory, DealSeMarketplaceDeal, DealSeProduct, DealSeStore } from "../../../lib/dealse-api";
 
@@ -74,5 +74,5 @@ export default async function RetailerDashboardPage() {
     imageAlt: deal.imageAlt, imageReference: deal.image?.startsWith("/media/") ? "" : deal.image || "", categoryId: deal.categoryId || "", offerType: deal.offerType, discountBps: deal.discountBps || 2000,
     status: deal.status, terms: deal.terms,
   }));
-  return <App mode="retailer" initialUser={user} initialRetailer={workspace} initialStores={stores} initialProducts={products} initialRetailerDeals={workspaceDeals} initialCategories={categories} initialNotificationCount={notificationCount} onCreateStore={createStore} onUpdateStore={updateStore} onCreateProduct={createProduct} onUpdateProduct={updateProduct} onArchiveProduct={archiveProduct} onCreateDeal={createDeal} onUpdateDeal={updateDeal} onPublishDeal={publishDeal} onPauseDeal={pauseDeal} onPreviewDeal={previewDeal} onRetailerLogout={logoutRetailer} />;
+  return <App mode="retailer" initialUser={user} initialRetailer={workspace} initialStores={stores} initialProducts={products} initialRetailerDeals={workspaceDeals} initialCategories={categories} initialNotificationCount={notificationCount} onCreateStore={createStore} onUpdateStore={updateStore} onCreateProduct={createProduct} onUpdateProduct={updateProduct} onArchiveProduct={archiveProduct} onCreateDeal={createDeal} onUpdateDeal={updateDeal} onPublishDeal={publishDeal} onPauseDeal={pauseDeal} onPreviewDeal={previewDeal} onValidateRetailerRedemption={validateRetailerRedemptionCredential} onConfirmRetailerRedemption={confirmRetailerRedemptionCredential} onLoadRetailerRedemptions={getRetailerRedemptionHistory} onRetailerLogout={logoutRetailer} />;
 }
