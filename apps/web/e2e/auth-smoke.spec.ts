@@ -41,7 +41,7 @@ for (const account of accounts) {
     const supabase = createClient(supabaseUrl!, publishableKey!, {
       auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     });
-    let report = "";
+    let report: string;
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
       expect(Boolean(data.session), `${account.label}: Supabase rejected the configured credentials (sanitized status ${error?.status ?? "unknown"}).`).toBe(true);
