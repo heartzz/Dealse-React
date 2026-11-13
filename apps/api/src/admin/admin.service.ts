@@ -178,9 +178,9 @@ export class AdminService {
       if (!reviewableStatuses.includes(current.status)) throw new ConflictException("Only draft stores awaiting review can be verified.");
       if (current.retailer.status !== RetailerStatus.ACTIVE) throw new ConflictException("Approve the retailer before verifying its store.");
       const [location] = await tx.$queryRaw<Array<{ hasCoordinates: boolean }>>`
-        SELECT "location" IS NOT NULL AS "hasCoordinates" FROM "stores" WHERE "id" = ${storeId}::uuid
+        SELECT "location" IS NOT NULL AND NOT ST_IsEmpty("location"::geometry) AS "hasCoordinates" FROM "stores" WHERE "id" = ${storeId}::uuid
       `;
-      if (!location?.hasCoordinates) throw new ConflictException("The retailer must add a store location before verification.");
+      if (!location?.hasCoordinates) throw new ConflictException("Add the store's map coordinates (latitude and longitude) before verification. A street address alone is not enough.");
       const now = new Date();
       const changed = await tx.store.updateMany({
         where: { id: storeId, status: current.status, retailer: { is: { status: RetailerStatus.ACTIVE } } },
