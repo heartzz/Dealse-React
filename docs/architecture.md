@@ -1,7 +1,7 @@
 # DealSe technical architecture
 
-**Status:** Proposed source of truth, based on the current repository and the founder's architecture brief. This is a design decision document, not evidence that the proposed services are deployed.
-**Last reviewed:** 2026-11-11
+**Status:** Target architecture and decision record, reconciled with the current local implementation. Proposed services and launch plans are not evidence that they are deployed.
+**Last reviewed:** 2026-11-14
 **Scope:** The first marketplace pilot and the path to grow it without prematurely splitting services.
 
 > The prior D1/Cloudflare Worker proposal in `backend-foundation.md` and `prototype/migrations/0001_backend_foundation.sql` is superseded. Do not use it as the production backend plan. The Vite prototype remains the visual reference; the current local Next.js/NestJS implementation and verification evidence are tracked separately in [`mvp-readiness-audit.md`](mvp-readiness-audit.md). This document remains the target architecture, not proof of production deployment.
@@ -14,9 +14,9 @@
 
 This blueprint is intentionally opinionated about engineering choices and explicit where product evidence is missing.
 
-## Administrator access foundation (2026-11-12)
+## Admin Backoffice implementation (2026-11-14)
 
-The existing Supabase identity and NestJS API remain authoritative. Admin endpoints require the existing provider-verified AAL2 claim and database `admin` role, followed by an active `admin_accounts` record and an exact permission grant. Root Admin receives permissions by role; other administrator roles remain least-privilege. The first Root Admin is established by the one-time server-side bootstrap documented in [ADR 0005](adr/0005-admin-backoffice-foundation.md). Existing admin role rows do not acquire permissions automatically. Marketplace states, retailer eligibility and public offer visibility are unchanged.
+The existing Supabase identity and NestJS API remain authoritative. Admin endpoints require the provider-verified AAL2 claim and database `admin` role, followed by an active `admin_accounts` record and the exact route permission. Root Admin receives permissions by role; other administrator roles remain least-privilege. The Backoffice implements retailer, store, offer, report, category, administrator and invitation workflows, private image review, audit history, and redemption-record inspection. The first Root Admin is established by the one-time server-side bootstrap documented in [ADR 0005](adr/0005-admin-backoffice-foundation.md). Existing admin role rows do not acquire permissions automatically. API integration coverage is present; authenticated Admin browser acceptance remains unverified pending a real AAL2 test account.
 
 Local first-root setup and migration steps are documented in [Admin Backoffice local setup](admin-backoffice-local-setup.md). Invitation tables are persistence only until an authorized acceptance flow is implemented.
 
@@ -27,15 +27,15 @@ Local first-root setup and migration steps are documented in [Admin Backoffice l
 | A. Business/product vision | DealSe is a local marketplace intended to connect customers with nearby retailers and offers, beginning with Ahmedabad/Gujarat in the product materials. The retailer controls their store information and offer terms. | The available repo does not validate market size, demand, retention, conversion, or operating results. |
 | B. Customer problem | The product hypothesis is that finding useful nearby local deals is fragmented and inconvenient; discovery should be local, visual, and easy to act on. | This is a product hypothesis, not validated user research. Priority segments and willingness to share location are unknown. |
 | C. Retailer problem | The materials frame local retailers as needing a practical way to present products and offers to nearby customers, particularly in quiet trading periods, while retaining control of terms. | Retailer acquisition, willingness to publish offers, staff workflow, and measurable value are unvalidated. |
-| D. Existing journeys | Customer: browse home/categories/nearby offers, open details, save or act, see store/location, and redeem in-store. Retailer: get started/onboard, create or manage store, create/publish offers, view dashboard/history, and redeem customer offers. | Web redemption is not established. QR has appeared in materials, but final code lifecycle, network-failure policy, and POS integrations are open. |
+| D. Existing journeys | Customer: browse home/categories/nearby offers, open details, save/follow, see store/location, and claim a short-lived QR offer. Retailer: onboard, manage store/products/offers, review redemption history, validate a claim and confirm redemption. Admin: review and moderate retailers, stores, offers, reports and administrators. | Web/API paths are implemented and locally tested at the levels recorded in [`mvp-readiness-audit.md`](mvp-readiness-audit.md). Physical-camera scanning, POS integration, offline redemption and broad production operations are not verified or implemented. |
 | E. Discussed features | Customer discovery, categories/search, favourites, store following, offer detail with a Redeem action, directions, notifications, retailer onboarding, store/product management, easy offer creation with suggestions, image choice/upload, retailer dashboard and redemption flow. AI-generated copy/creative and offer recommendations have been discussed. | Feature mentions are not equivalent to a committed MVP. AI and advanced inventory should not gate the first marketplace test. |
-| F. Existing code/technology | `prototype/` contains the React 19/Vite visual reference. `apps/web` contains Next.js customer, retailer and admin workspaces; `apps/api` contains a NestJS modular monolith; Prisma models target PostgreSQL/PostGIS. Supabase Auth is the web identity provider; roles and marketplace data remain in PostgreSQL. | This implementation is local/dev and its live Supabase browser journeys have not been verified. The API route set and evidence are in [`api-routes.md`](api-routes.md) and [`mvp-readiness-audit.md`](mvp-readiness-audit.md). |
-| G. Existing backend status | NestJS uses Prisma with the existing local PostgreSQL 18/PostGIS database. Five checked-in additive migrations are applied in the local development database. Store/product/deal/favourite, admin moderation, media metadata, follows and in-app notifications have PostgreSQL integration coverage. | This is not a production deployment. Production DB operations, Supabase production configuration, object storage, and operational monitoring are not configured. The D1/Worker artifacts are historical and must not be extended as production infrastructure. |
+| F. Existing code/technology | `prototype/` contains the React 19/Vite visual reference and demo workspace. `apps/web` contains Next.js customer, retailer and Admin workspaces; `apps/api` contains the NestJS modular monolith; Prisma targets PostgreSQL/PostGIS. Supabase Auth is the web identity provider; roles and marketplace data remain in PostgreSQL. Separate Expo app shells exist. | The implementation is local/staging-candidate code, not a production deployment. Focused live-session customer/retailer browser coverage exists; Admin AAL2 browser acceptance and broader account journeys remain unverified. API route evidence is in [`api-routes.md`](api-routes.md) and [`mvp-readiness-audit.md`](mvp-readiness-audit.md). |
+| G. Existing backend status | NestJS uses Prisma with PostgreSQL 18/PostGIS. Eight additive Prisma migrations are checked in; all eight were previously verified applied to local `dealse_dev`. Integration tests cover identity, marketplace, media, Admin moderation/management, notifications and QR redemption, including concurrent claim/confirmation capacity. | No production database migration or deployment is claimed. Production DB operations, Supabase configuration, private object storage, monitoring, backup/restore and rollback remain open. The D1/Worker artifacts are historical and must not be extended as production infrastructure. |
 | H. Existing AI ideas | Offer-copy recommendations, AI-generated/selected offer imagery, and retailer-facing suggestions have been explored. The prototype has optional Gemini-oriented Worker endpoints. | No provider key/configuration or verified production AI path is present. The endpoint/provider implementation is experimental and should not define the future abstraction. |
 | I. Monetization assumptions | Materials have referenced commercial ideas, but the repo's UX source labels pricing/fees and claims that require confirmation as unsettled. | No validated pricing, commission, subscription, promotion fee, payout or billing decision. Do not display fees or promise reach/results as fact. |
 | J. Preserve | Product intent; selected local-discovery homepage and Ahmedabad visual context; supplied logo and approved imagery; customer pink and retailer teal audience distinction; customer deal-detail/redeem concept; retailer onboarding, offer creation, dashboard and history concepts; usable content and responsive behavior. | Preserve product decisions and visual assets selectively. Rebuild implementation where needed; do not preserve demo data as real records. |
 | K. Rebuild/discard | Replace the single Vite app as the production platform, in-memory persistence, mock listings/metrics, and demo-only redemption state. Replace the D1/Worker backend direction with the selected API/database architecture. | The current prototype can remain a reference/preview until the new product slice is ready. Do not silently turn its sample data into seed production data. |
-| L. Known technical debt | The web implementation still contains prototype-derived client UI. There is no checked-in generated OpenAPI contract or typed API client; GitHub CI does not run browser E2E, and live Supabase auth/MFA is unverified. API rate limiting, analytics, production object storage, observability and release/restore procedures remain open. A PostGIS integration job is being added to CI. | Local API integration tests are evidence only for the paths they exercise; they do not prove browser UX or production readiness. |
+| L. Known technical debt | The web implementation contains prototype-derived client UI. `packages/contracts/openapi.yaml` is a legacy, incomplete contract and is not synchronized with all NestJS routes; there is no contract drift check. CI runs a Chromium public-marketplace browser job and a PostgreSQL/PostGIS API integration job. API throttling, retailer redemption analytics, Root Admin redemption reports, physical-device camera/WebView coverage, production object storage, observability and release/restore procedures remain open. | API tests and focused browser tests prove only the paths they exercise; they do not establish production readiness. Authenticated Admin browser acceptance and live MFA behavior remain unverified. |
 
 ### Approved P0 product defaults and remaining follow-ups
 
@@ -84,7 +84,7 @@ apps/
   worker/                  # Optional standalone Nest application context for jobs
 packages/
   api-client/              # Generated TypeScript client from the OpenAPI contract
-  contracts/               # OpenAPI document, shared error/pagination wire shapes
+  contracts/               # legacy OpenAPI YAML; reconcile with current API before generation
   design-tokens/           # Platform-neutral colors, spacing, typography, radii
   eslint-config/
   typescript-config/
@@ -114,7 +114,7 @@ Customer and retailer apps should be **separate app targets in the same monorepo
 - **Push:** store APNs/FCM/Expo push token against a device record; explicit permission/context; preference and quiet-hour controls; server outbox for events. Delivery is best effort, never the only source of important state. Remote notifications require a native development/production build rather than Expo Go on current Android Expo SDKs ([Expo Notifications](https://docs.expo.dev/versions/latest/sdk/notifications/)).
 - **Deep links:** verified HTTPS universal/app links for `/deals/:slug`, `/stores/:slug`, and safe auth callbacks. Never place access tokens or redemption bearer codes in a URL. [React Native Linking](https://reactnative.dev/docs/linking).
 - **Location:** ask only after a clear “near me” action; permit manual city/area selection without granting GPS. Foreground approximate location is enough for discovery; do not continuously track. Store retailer location as precise PostGIS geography, expose only public address/map coordinates selected by retailer.
-- **Camera/QR:** `expo-camera` or equivalent native camera module only when redemption policy is finalized. The scan provides an opaque credential; API checks and atomically confirms it. Client cannot self-approve it. [Expo Camera](https://docs.expo.dev/versions/latest/sdk/camera/).
+- **Camera/QR:** the web retailer scanner and customer QR presentation are implemented. A native client still needs `expo-camera` or an equivalent module; no native scan flow or physical-device camera session has been verified. The scan provides an opaque credential; the API validates and atomically confirms it. The client cannot self-approve it. [Expo Camera](https://docs.expo.dev/versions/latest/sdk/camera/).
 - **Uploads:** the Web MVP currently uses the authenticated Next.js multipart proxy into NestJS so Supabase browser tokens and storage credentials stay server-side. NestJS validates, decodes, resizes and re-encodes before writing to the private storage adapter. The local adapter is development-only; production requires a private Supabase Storage bucket. See [ADR 0003](adr/0003-media-ingress-and-development-storage.md). Native clients may move to scoped signed uploads after volume justifies it, retaining server-side verification. Keep binary payloads out of JSON and SQL.
 - **Analytics/errors:** typed allowlisted product events, pseudonymous IDs, privacy-safe error reports, no tokens, QR codes, message bodies or precise location in event properties.
 - **Testing:** Jest + React Native Testing Library for behavior; API client contract checks; Maestro for early black-box Android journeys or Detox when deeper native synchronization/control becomes necessary. Add tests around accessibility labels and error/empty/loading states.
@@ -149,7 +149,7 @@ Each module owns its application use cases and persistence access. Modules depen
 | `favourites` | Save/unsave deals | Collections/preferences |
 | `notifications` | Transactional in-app inbox and store-follow foundation | Push/email/SMS preferences, devices, delivery workflows and campaigns |
 | `media` | Signed upload, metadata, ownership, processing status | Moderation and advanced transformations |
-| `redemptions` | Only if QR/code is in first real pilot; transactional consume | POS integration/fraud tooling |
+| `redemptions` | Implemented online web/API claim, validation, confirmation, history and permission-scoped Admin inspection; transactional consume | POS integration, physical-device coverage and fraud tooling |
 | `analytics` | Essential event ingestion + aggregated retailer counters | Cohorts, attribution, warehouse export |
 | `AI` | **Defer from critical path**; feature-flagged copy suggestion slice after core works | Creative generation, recommendations, assistant/RAG |
 | `admin` | Retailer/store review, category maintenance, customer report handling, offer/store moderation and audit trail | Broader support queues and operational tooling |
@@ -214,10 +214,12 @@ PATCH  /api/v1/deals/:dealId             # edit permitted draft fields
 POST   /api/v1/deals/:dealId/publish
 POST   /api/v1/media/upload-intents
 POST   /api/v1/media/:assetId/complete
-POST   /api/v1/deals/:dealId/redemption-codes   # only if approved for MVP
-POST   /api/v1/stores/:storeId/redemptions/check
-POST   /api/v1/stores/:storeId/redemptions/confirm
+POST   /api/v1/customers/me/claims
+POST   /api/v1/retailers/:retailerId/stores/:storeId/redemptions/validate
+POST   /api/v1/retailers/:retailerId/stores/:storeId/redemptions/confirm
 ```
+
+These are illustrative API shapes; see [`api-routes.md`](api-routes.md) for the implemented controller paths. The legacy OpenAPI YAML is incomplete and is not currently an authoritative generated client contract.
 
 Use additive `/v1` changes while compatible; breaking wire changes get `/v2` or an explicit migration window. OpenAPI must be the client contract. GraphQL is not justified: fixed client workflows, public SEO pages and a single backend favor straightforward REST. Revisit only if several clients require complex, highly variable graph traversal that creates measured overfetch/coordination costs.
 
@@ -315,9 +317,9 @@ Use OWASP ASVS as an application checklist and OWASP API Security Top 10 for API
 
 ## 15. CI/CD
 
-GitHub Actions on pull requests: install pinned Node/pnpm; format/lint; typecheck; relevant unit tests; API integration tests against Postgres **with PostGIS**; Next/API build; OpenAPI diff/generated-client check; dependency/secret/container scans. Keep test data synthetic and deterministic. Do not rely on SQLite to simulate Postgres constraints or PostGIS.
+Target CI for pull requests: install pinned Node/pnpm; lint; typecheck; workspace builds; API integration tests against Postgres **with PostGIS**; browser acceptance; and, when the contract is reconciled, OpenAPI/client drift checks plus dependency/secret/container scans. Keep test data synthetic and deterministic. Do not rely on SQLite to simulate Postgres constraints or PostGIS. The current GitHub workflow runs workspace lint/typecheck/build, PostgreSQL/PostGIS API integration, and Chromium public-marketplace browser jobs; it does not deploy or run authenticated Admin browser acceptance.
 
-Merge to main deploys staging. Run additive migrations as a separate job, smoke health and critical journeys, and publish immutable API/web images/artifacts. Production deploy requires a protected environment approval, backup status check, migration compatibility, health check, and rollback path. Use expand → deploy compatible app → backfill → contract migrations; do not run destructive schema changes in the same release as a dependency.
+Future target: merging to main deploys staging. Run additive migrations as a separate job, smoke health and critical journeys, and publish immutable API/web images/artifacts. Production deploy requires a protected environment approval, backup status check, migration compatibility, health check, and rollback path. Use expand → deploy compatible app → backfill → contract migrations; do not run destructive schema changes in the same release as a dependency. Staging/production deployment is not configured or verified today.
 
 Environments: local Compose; staging with separate DB/storage/auth config and synthetic seed; production with separate account/project/buckets/secrets. PR previews are optional and should not create uncontrolled database spend. Store mobile signing keys in Expo EAS or protected GitHub secrets, never in Git. Build Android preview/internal releases through EAS once native work begins; release Play Store only with separate manual approval and staged rollout. iOS can follow after demand/resources are known.
 
@@ -368,22 +370,24 @@ Keep semantic tokens shared, platform-specific components native. The existing `
 
 ### P0 — prove the marketplace loop
 
-- **Customer:** browse city/category/nearby published deals, deal detail/store page, optional location permission with manual fallback, save/favourite (sign-in policy must be decided), directions handoff.
+- **Customer:** browse city/category/nearby published deals, deal detail/store page, optional location permission with manual fallback, save/favourite, directions handoff and authenticated online QR claim.
 - **Retailer:** account/store onboarding, create/edit simple product, create/edit draft deal, add own image, publish/pause under a clear policy, see basic deal state.
 - **Platform:** API/auth/roles, Postgres/PostGIS, media uploads, public SEO web deal/store pages, retailer responsive web, basic admin/support intervention and audit, essential event capture, Android internal pilot if customer mobile is needed.
 - Keep offer copy/image useful without AI; one city and a narrow catalog can be manually operated.
 
 ### P1 — after real pilot friction
 
-Retailer RN app, store follows, push preferences, redemption codes/QR if operationally approved, staff memberships, product variants/inventory levels, notification delivery, first AI offer-copy suggestions, richer retailer analytics, expanded admin operations.
+Retailer RN app, push preferences and delivery, staff memberships, product variants/inventory levels, first AI offer-copy suggestions, retailer redemption analytics, Root Admin redemption reports, and expanded admin operations. The customer/retailer web QR issuance, validation, confirmation and history slice is implemented; physical-device and production operational readiness remain separate gates.
 
 ### P2 — only with evidence
 
 Payments/subscriptions, POS integration, loyalty, logistics, advanced inventory, recommendation ranking, AI creative generation/RAG, pgvector, external search, warehouse and multi-region.
 
-Ruthless sequence: prove “retailer can publish a real offer → customer can discover and engage” before automating inventory, billing, personalization, or creative production. If a pilot retailer requires redemption as the core proof, bring the minimal online redemption slice into P0 with its operating and staff policy settled first.
+Ruthless sequence: prove “retailer can publish a real offer → customer can discover and engage” before automating inventory, billing, personalization, or creative production. The minimum online QR redemption slice is implemented for the web/API; validate its operating policy and production controls before a live pilot.
 
-## 20. Twelve-week execution plan
+## 20. Original twelve-week planning baseline
+
+This is the initial sequencing proposal, not a report of current completion. Several milestones are now implemented; current status and evidence live in [`mvp-readiness-audit.md`](mvp-readiness-audit.md). Future work should focus on the open operational and verification items listed there rather than repeating completed foundation tasks.
 
 At 2–3 hours/day, 6 days/week, there are roughly 144–216 founder hours in 12 weeks. With Codex, this can create a tightly scoped Android-first pilot, not a full multi-platform production marketplace. Retailer native app and optional capabilities remain later. Reassess scope weekly.
 
@@ -399,7 +403,7 @@ At 2–3 hours/day, 6 days/week, there are roughly 144–216 founder hours in 12
 | 8 | Build public web marketplace pages. | Public discovery/deal/store read endpoints and Postgres text search. | No native discovery dependency yet. | SEO deal/store/category pages, responsive layout, cache revalidation. | Playwright crawl/render/cache tests; Codex checks mobile viewport and metadata. | Search engines receive usable public HTML; stale personalized data is never cached. |
 | 9 | Add customer discovery on Android. | Nearby/category queries, bounded radius/pagination and rate limits. | RN home/list/detail; manual city plus optional foreground location. | Fix public/retailer defects only. | API + device smoke for denied GPS, empty/error/loading; Codex tests responsive/accessibility. | Android can browse and open real offers without forced GPS. |
 | 10 | Add customer account and save. | Profile, favourite idempotency and session revocation support. | Sign-in, save/unsave, public link routing and read-only offline cache. | BFF cookies and account settings. | Playwright + Maestro; test token storage and retries; Codex tests logout/expired session. | Customer can sign in, save, reopen a link and recover from API failure. |
-| 11 | Harden the pilot. | Minimal product events, operational alerts, restore rehearsal; redemption only if confirmed P0. | Accessibility, device permission review, Android internal build. | Keyboard/accessibility polish and error states. | Security, migration, restore and concurrent redeem tests if included; Codex handles explicit findings only. | Critical journeys and recovery are demonstrated; privacy-safe event review complete. |
+| 11 | Harden the pilot. | Minimal product events, operational alerts, restore rehearsal and redemption concurrency/recovery controls. | Accessibility, device permission review, Android internal build. | Keyboard/accessibility polish and error states. | Security, migration, restore and concurrent redemption tests; Codex handles explicit findings only. | Critical journeys and recovery are demonstrated; privacy-safe event review complete. |
 | 12 | Run a small invited pilot. | Triage, operational dashboards, support/admin workflow and release config. | Internal Android distribution; gather user feedback. | Retailer/customer web fixes from observed issues. | Re-run end-to-end suite, backup check, release checklist; Codex takes small fixes with acceptance criteria. | A small cohort completes the loop; evidence, failures and next scope are documented. |
 
 Codex task focus per week: one vertical slice, one PR/task at a time, acceptance criteria first, tests for new invariants, no unrelated redesign. Database and auth come before UI that implies durable data. Do not add AI, Redis, payment, or retailer RN solely to fill calendar capacity.
@@ -414,7 +418,9 @@ Codex task focus per week: one vertical slice, one PR/task at a time, acceptance
 - Scope rule: implement only acceptance criteria. Raise conflicts/open product policy in the PR; use conservative behavior and do not fabricate fees, performance claims, moderation outcomes, or data.
 - Before implementation, inspect affected code/docs and current git status; never overwrite unrelated work. Run scoped tests/builds and report failures honestly.
 
-### First ten Codex tasks (in order)
+### Original first ten task proposal
+
+This list records the early build order. It is historical planning context and should not be read as a list of unfinished implementation tasks.
 
 1. Scaffold pnpm monorepo, TypeScript/lint config and minimal empty app shells; preserve the current prototype under an explicitly named legacy/reference path. No product features.
 2. Set up local PostgreSQL with PostGIS, Prisma, migrations, health check and synthetic seed.
@@ -427,7 +433,9 @@ Codex task focus per week: one vertical slice, one PR/task at a time, acceptance
 9. Implement public discovery/deal/store endpoints with PostGIS and PostgreSQL search.
 10. Implement customer RN discovery/detail/save flow against generated API client.
 
-## 22. Development sequence
+## 22. Development sequence and current state
+
+The sequence below remains a useful dependency order, not a current implementation checklist. The web/API marketplace, moderation, notifications and redemption slices have been built. Native app workflows, analytics/reporting, staging/production operations and the verification gates in the readiness audit remain future work.
 
 Use **architecture → repository → database → auth → retailer core → customer core → deal lifecycle/discovery → notifications/redemption if required → AI → analytics depth → hardening → pilot**.
 
@@ -441,7 +449,7 @@ Detailed order:
 6. Simple product + safe media pipeline.
 7. Deal drafts, terms/date constraints, publish/pause/admin policy.
 8. Public web discovery/deal/store pages and retailer dashboard; create a customer RN app vertical slice alongside API-ready public data.
-9. Favourites and minimal analytics; add QR redemption only if it is a pilot success criterion and policy is decided.
+9. Favourites and minimal analytics; online QR redemption is implemented in the web/API slice. Retailer analytics and Root Admin redemption reports remain unimplemented.
 10. Notifications and AI suggestions after a real event path exists.
 11. Accessibility, security, backup/restore, performance, pilot ops.
 12. Invite a small retailer/customer cohort; measure behavior and revise roadmap from evidence.
@@ -477,11 +485,11 @@ Detailed order:
 - AI is optional, server-side and behind a narrow adapter; no AI dependency for P0 offer creation/publication.
 - Preserve the customer pink / retailer teal product distinction; rebuild the production implementation and avoid porting mock state as data.
 
-## IMPLEMENTATION STATUS NOTE
+## IMPLEMENTATION STATUS NOTE — 2026-11-14
 
-The production web/API slice now includes Supabase email/password sessions, NestJS authorization, customer discovery and favourites, retailer/store/product/deal workflows, and an AAL2-protected admin moderation workspace with retailer, store and offer list/detail routes. This status is a repository snapshot, not a claim that authenticated admin browser acceptance has passed; see [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for evidence and remaining gaps. The local PostgreSQL/PostGIS database remains the application system of record. Phone OTP is deferred; do not follow the historical [`backend-integration-plan.md`](backend-integration-plan.md) instructions to configure SMS as the next step.
+The local web/API implementation includes Supabase email/password session routes; customer discovery, favourites, follows, profiles, notifications and QR claim UI; retailer/store/product/offer workflows, browser QR scanner, explicit redemption confirmation and history; and an AAL2- and permission-protected Admin Backoffice for moderation, administrator management and redemption record inspection. The NestJS redemption service uses the authenticated session identity, stores only credential hashes, checks per-customer limits independently from global offer capacity, and performs confirmation transactionally. The local PostgreSQL/PostGIS database remains the application system of record. Phone OTP is deferred. This status is not a production deployment claim; API and browser verification limits are recorded in [`mvp-readiness-audit.md`](mvp-readiness-audit.md).
 
-Nearby location discovery, saved-list error states and the transactional notification/follow API are implemented in source and covered by local integration checks. Remaining priorities are configuring and verifying production media storage, browser E2E coverage, live Supabase registration/MFA walkthroughs, and the remaining security hardening. Canonical deal/store pages, notification inboxes and media routes still need browser verification. Keep the Vite prototype as a visual reference while the Next.js experience is in use.
+Nearby discovery, deal/store pages, notification inboxes and media routes are implemented. The current verification includes 45 passing API tests and seven passing focused browser tests; one authenticated Admin browser test skipped because a real AAL2 test account was not configured. Focused customer and retailer redemption browser tests used configured real test accounts, but they do not establish all authenticated account journeys or physical-camera operation. Staging deployment, native camera/WebView behavior, private production storage, monitoring, backups and rollback remain unverified or blocked on external setup. Keep the Vite prototype as a visual reference while the Next.js experience is in use.
 
 ## Primary technical references
 

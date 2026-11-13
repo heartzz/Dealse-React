@@ -1,16 +1,16 @@
 # DealSe PostgreSQL schema blueprint
 
-**Status:** Four additive Prisma migrations are applied to the existing local PostgreSQL 18 + PostGIS `dealse_dev` database, including admin/moderation support (verified 2026-11-10). No database was recreated; production was not changed.
+**Status (reviewed 2026-11-14):** The Prisma schema and eight additive migrations are checked in. All eight were previously verified applied to the existing local PostgreSQL 18 + PostGIS `dealse_dev` database. No database was recreated and no production database was migrated. This document describes the current schema and selected future extensions; proposed tables below are explicitly marked deferred.
 
-**Admin Backoffice V1 foundation:** An additional additive Prisma migration introduces administrator accounts, permission grants, invitation records, a one-time bootstrap marker and admin role/permission context on audit rows. This migration is separate from the four previously applied migrations; it does not change marketplace tables or status enums. Apply locally only after reviewing the migration with `pnpm --filter @dealse/api db:migrate:dev`. The API also requires Supabase AAL2 and explicit permissions. See [ADR 0005](adr/0005-admin-backoffice-foundation.md).
+**Admin Backoffice:** Administrator accounts, permission grants, invitation records, a one-time bootstrap marker and admin audit context are implemented. The relevant additive migrations are listed below. API routes require the database Admin role, verified Supabase AAL2, an active account and the route permission. See [ADR 0005](adr/0005-admin-backoffice-foundation.md).
 
 ## Implemented P0 schema
 
-The Prisma schema and migrations are in `apps/api/prisma/`. They include users/profiles/account roles, retailer memberships, verified stores, categories, simple products, media metadata and image links, deals/moderation holds, customer deal reports, deal-product links, favourites, followed stores, audit logs, and online single-use redemption codes/redemptions. The initial migration enables PostGIS and creates a GiST index for store geography; the auth migration adds `user_account_roles` and backfills existing users as customers without dropping data.
+The as-built Prisma schema and migrations are in `apps/api/prisma/`. They include users/profiles/account roles, retailer memberships, stores, categories, products, media metadata and image links, deals/moderation holds, customer deal reports, favourites, followed stores, notifications, admin accounts/permissions/invitations, audit logs, and online single-use redemption codes/redemptions. The initial migration enables PostGIS and creates a GiST index for store geography; the account-role migration adds `user_account_roles` and backfills existing users as customers without dropping data. See the migration inventory below for all eight checked-in migrations.
 
 The custom SQL checks enforce normalized lowercase account email, verified/geocoded active stores, positive media dimensions/size, one primary image per entity, valid deal dates/discount representation, positive redemption caps, 32-byte SHA-256 code hashes, valid code expiry, and consistent deal/store/customer references for redemption rows. `Prisma` cannot represent the geography column as a generated location type; proximity queries must use a bounded, parameterized SQL repository.
 
-Redemption confirmation must run in one database transaction: lock the deal row, validate current publication window and store status, validate retailer membership and store scope, hash and compare the opaque code, check code expiry/status, enforce the global and per-customer caps, increment `redemption_count`, assign the next customer redemption number, mark the code redeemed, and insert the redemption using the caller's idempotency key. Unique constraints and the composite foreign keys prevent reusing a code or attaching it to a different customer/deal/store. No offline confirmation is supported.
+Issue and confirm are server-owned. The authenticated session supplies `customer_user_id`; client-supplied customer IDs are not trusted. `deals.max_redemptions` is the global capacity and `deals.redemption_count` tracks confirmed redemptions. `deals.per_customer_limit` defaults to 1. The per-customer count filters by both `deal_id` and the authenticated `customer_user_id`; it does not include another customer's redemptions. A claim-time global-capacity check and separate per-customer check prevent claims beyond either limit; confirmation rechecks both while locking and atomically updating the deal and code. Outstanding claims do not increment `redemption_count`; only successful confirmations do. Validation is informational and consumes nothing. Staff membership is rechecked at confirmation. “Redeemed” means retailer-confirmed, not proof of purchase/payment. No offline confirmation is supported.
 
 The local migration command is `pnpm --filter @dealse/api db:migrate:dev`. Do not run it against production; use the reviewed release path and `db:migrate:deploy` there.
 
@@ -102,14 +102,14 @@ Current in-app event types are `RETAILER_PUBLISH_CONFIRMATION`, `STORE_ANNOUNCEM
 
 **Deal publication constraints:** validate the store and product are active, the editor has membership, required terms/image fields are satisfied, start/end/time zone are valid, and status transition is permitted. Database checks handle local invariants; service transaction handles cross-table invariants. Do not trust `status`, `published_at`, discount, or store IDs supplied by a customer client.
 
-## Redemptions (only if pilot requires it)
+## Implemented redemptions
 
 | Table | Columns, keys and important rules | Indexes / relationships |
 |---|---|---|
-| `redemption_codes` | `id uuid PK`; `deal_id uuid FK deals`; `customer_user_id uuid FK users NULL` (nullable only if guest redemption is approved); `token_hash bytea UNIQUE NOT NULL`; `issued_at timestamptz`; `expires_at timestamptz`; `status text` (`issued/redeemed/expired/revoked`); `idempotency_key text NULL`; `created_request_id uuid`; CHECK expiry after issue. Store only hash of high-entropy code, never the raw code. | `(deal_id,status,expires_at)`; `(customer_user_id,issued_at DESC)`; unique hash. Rate limiting and issuance caps are service rules. |
-| `redemptions` | P0 per approved defaults. `id uuid PK`; `code_id uuid FK redemption_codes`; `deal_id uuid FK deals`; `store_id uuid FK stores`; `customer_user_id uuid FK users`; `redeemed_by_user_id uuid FK users`; `customer_redemption_number int`; `redeemed_at timestamptz`; `idempotency_key text`; `request_id uuid`; `created_at`. Composite FKs guarantee code/deal/customer and deal/store consistency; unique `(deal_id,customer_user_id,customer_redemption_number)` enforces each customer redemption sequence; unique `(store_id,idempotency_key)` deduplicates retries. Immutable after success. | `(store_id,redeemed_at DESC)`; `(deal_id,redeemed_at DESC)`; `(customer_user_id,redeemed_at DESC)` only with suitable privacy access. |
+| `redemption_codes` | `id uuid PK`; `deal_id uuid FK deals`; `customer_user_id uuid FK users NOT NULL`; `token_hash bytea UNIQUE NOT NULL`; `issued_at timestamptz`; `expires_at timestamptz`; status `ISSUED/REDEEMED/EXPIRED/REVOKED`; request/audit metadata. A partial unique index permits at most one currently issued code per `(deal_id,customer_user_id)` while retaining all historical states. Store only the SHA-256 hash of the high-entropy code. | `(deal_id,status,expires_at)`; `(customer_user_id,issued_at DESC)`; unique token hash; partial unique issued-claim index. |
+| `redemptions` | `id uuid PK`; `code_id uuid FK redemption_codes`; `deal_id uuid FK deals`; `store_id uuid FK stores`; `customer_user_id uuid FK users`; `redeemed_by_user_id uuid FK users`; `customer_redemption_number int`; `redeemed_at timestamptz`; idempotency/request metadata. Composite FKs guarantee code/deal/customer and deal/store consistency; unique `(deal_id,customer_user_id,customer_redemption_number)` enforces the customer sequence; store-scoped idempotency prevents duplicate confirmation. Historical redemptions are retained. | `(store_id,redeemed_at DESC)`; `(deal_id,redeemed_at DESC)`; `(customer_user_id,redeemed_at DESC)` under appropriate privacy access. |
 
-Issue and confirm must be server-owned. Codes contain a random opaque token with a five-minute expiry; store only its SHA-256 hash. Confirmation uses a single transaction with a deal-row lock, store/deal/status/expiry checks, global and per-customer cap checks, code status update, redemption-count increment and insert protected by unique constraints. A pre-check is informational and consumes nothing. Staff authorization is rechecked at confirm. “Redeemed” means retailer-confirmed event, not proof of purchase/payment.
+Issue and confirm are server-owned. The authenticated session supplies `customer_user_id`; client-supplied customer IDs are not trusted. `deals.max_redemptions` is the global capacity and `deals.redemption_count` tracks confirmed redemptions. `deals.per_customer_limit` defaults to 1. The per-customer count filters by both `deal_id` and the authenticated `customer_user_id`; it does not include another customer's redemptions. Claim issuance and confirmation check this limit independently from the global cap. Confirmation uses a transaction with deal/code locking, eligibility and membership checks, conditional global-count increment, code status update, redemption insert and audit write. Outstanding claims do not increment `redemption_count`; only successful confirmations do. Validation is informational and consumes nothing. “Redeemed” means retailer-confirmed, not proof of purchase/payment. No offline confirmation is supported.
 
 ## External notification delivery (deferred)
 
@@ -148,14 +148,27 @@ The in-app `notifications` table is defined in the engagement section above and 
 7. Deal expiry: scheduled worker may set status to `ended`, but discovery always checks `ends_at > now()` so worker delay cannot keep an expired offer visible.
 8. Product text search: weighted `tsvector` (name highest, retailer/store and description lower), GIN; trigram where typo tolerance matters. Do not create redundant indexes without checking writes/query plans.
 
-## Migration plan
+## Migration inventory and rollout
 
-P0 defaults are approved and the initial Prisma schema/migration exists. Apply it to a fresh local database and verify the PostGIS extension, geography index, constraints and Prisma migration state before any feature depends on it. Add a small typed repository method for proximity and synthetic development fixtures after confirming category taxonomy with pilot retailers. Use the same PostgreSQL major version and PostGIS extension as the hosted environment. Review migrations before release; do not apply the local migration directly to production.
+Eight additive Prisma migrations are checked in, in order:
 
-The D1 SQL in `prototype/migrations/0001_backend_foundation.sql` is historical prototype material and must not be run against or translated into the production schema without review.
+1. `20261005090000_initial_p0`
+2. `20261108113000_user_account_roles`
+3. `20261109120000_marketplace_deal_fields`
+4. `20261110130000_admin_moderation_reports`
+5. `20261111100000_in_app_notifications`
+6. `20261112140000_admin_backoffice_foundation`
+7. `20261112160000_moderation_rejected_states`
+8. `20261113120000_one_issued_redemption_code_per_customer_deal`
+
+The existing local `dealse_dev` database was previously verified with all eight applied. Production has not been migrated. Check local status with `pnpm --filter @dealse/api exec prisma migrate status`; use `pnpm --filter @dealse/api db:migrate:deploy` only after confirming the configured target is the intended development database. Review each additive migration before release; do not apply local migrations to production without a separately reviewed release plan.
+
+The redemption migration preflights duplicate issued rows and creates a partial unique index for one issued code per customer/deal. It preserves redeemed, expired and revoked history. The D1 SQL in `prototype/migrations/0001_backend_foundation.sql` is historical prototype material and must not be run against or translated into the production schema without review.
 
 ### Applied admin/moderation migration
 
 `20261110130000_admin_moderation_reports` adds the `admin` account-role enum value, moderation-hold fields on `deals`, and `deal_reports` with report lifecycle and reviewer foreign keys. It is additive and does not alter existing records. The local `dealse_dev` database has this migration applied; production has not. Since PostgreSQL enum values cannot be removed in place, rollback after role use should be forward-only or use a reviewed type rebuild.
 
 `20261112140000_admin_backoffice_foundation` adds administrator accounts, permission grants, invitations, bootstrap state, and audit actor context. `20261112160000_moderation_rejected_states` adds the `rejected` status value to retailer, store, and deal enums so rejection remains distinct from pause, suspension, closure, and expiry. Both migrations are additive and applied only to local `dealse_dev`; production has not been changed. Rejection reasons and state snapshots use the existing audit log JSON fields.
+
+`20261113120000_one_issued_redemption_code_per_customer_deal` adds the partial unique constraint that allows one currently issued claim per customer/deal while preserving historical claim and redemption rows. It is applied to local `dealse_dev`; production has not been changed.

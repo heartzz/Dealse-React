@@ -1,53 +1,145 @@
 # DealSe
 
-DealSe is being rebuilt as a TypeScript monorepo. See [`docs/architecture.md`](docs/architecture.md) for product and technical decisions and [`docs/database-schema.md`](docs/database-schema.md) for the proposed data model.
+DealSe is a local-discovery marketplace that connects customers with nearby retailers and time-limited offers. The current product is a web-first local implementation for browsing offers, managing retailer workspaces, moderating marketplace content, and redeeming offers in store with short-lived QR credentials. The repository also contains separate Expo app shells; the native product flows are not implemented.
 
-For the current backend checkpoint and the ordered path to a working customer/retailer marketplace, see [`docs/backend-integration-plan.md`](docs/backend-integration-plan.md).
+This repository is an active development/staging candidate, **not a production deployment or production-ready service**. See the [MVP readiness audit](docs/mvp-readiness-audit.md) for verified scope and open work.
 
-## Workspace foundation
+## Current implementation
 
-The repository contains empty application shells for Next.js web, NestJS API, and two separate Expo/React Native apps. The existing Vite implementation remains under `prototype/` as a product/design reference and is not part of the production workspace.
+- **Customers:** public offer and store discovery, search/category/city filters, opt-in nearby search, offer/store details, favourites, followed stores, profile editing, in-app notifications, and a redemption-claims list.
+- **Retailers:** website registration/session routes, tenant-scoped store/product/offer workflows, image galleries, draft/preview/publish/pause, store map coordinates, QR validation/confirmation, and store-scoped redemption history.
+- **Admin:** role- and permission-guarded Backoffice for retailer, store, offer, report, category and administrator review/management, private image review, and audit history. Admin API access requires the database Admin role, an active account, AAL2 and the route permission.
+- **QR redemption:** customers request a claim for an eligible offer. The API returns a high-entropy credential once and persists only its SHA-256 hash. The web client displays a QR; a retailer scans it or enters the credential, validates it without changing state, then explicitly confirms redemption. Confirmation is transactional, idempotent and checks the offer-wide cap independently from the authenticated customer’s per-customer cap. Claims expire after five minutes or at the earlier offer end. There is no offline redemption.
+- **Marketplace data:** PostgreSQL/PostGIS is the system of record. Prisma migrations and PostgreSQL integration tests cover marketplace, moderation, notifications and redemption invariants.
 
-### Requirements
+The browser redemption workflow has focused local Playwright coverage. A successful manual scan using a physical camera, production-like hosting, live Admin AAL2 browser acceptance, and mobile app flows have not been verified. A web scanner component using browser camera APIs is implemented; see the audit for its test boundaries.
 
-- Node.js 24.15.0 or compatible current LTS (the repository pins `.node-version`). NestJS 12's project generator requires a newer Node release than the machine's previous Node 22.16 runtime.
-- pnpm 11.19.0, pinned by `packageManager` in the root manifest.
+## Technology
 
-### First install
+- Node.js and pnpm workspaces; TypeScript
+- Next.js App Router, React, server actions and Supabase SSR for the web experience
+- NestJS REST API with DTO validation and OIDC/JWKS access-token verification
+- PostgreSQL 18 with PostGIS; Prisma schema, client and migrations
+- Expo Router / React Native shells for distinct customer and retailer apps
+- Playwright for web browser checks; Node test runner for API integration suites
 
-```sh
-pnpm install
+## Repository layout
+
+```text
+apps/api/                 NestJS modules, Prisma schema/migrations, API tests
+apps/web/                 Next.js customer, retailer and Admin web workspaces
+apps/customer-mobile/     Expo customer app shell (native flows not implemented)
+apps/retailer-mobile/     Expo retailer app shell (native flows not implemented)
+packages/contracts/       Existing OpenAPI YAML; currently legacy/incomplete
+packages/api-client/      Typed client for the operations it currently covers
+packages/design-tokens/   Shared design tokens
+prototype/                Vite/React product reference and prototype tests
+docs/                     Architecture, routes, schema, readiness and setup notes
+infra/local/              Optional local Docker Compose services
 ```
 
-This generates the workspace lockfile. Commit `pnpm-lock.yaml` before using the frozen-lockfile CI workflow.
+NestJS controllers and DTOs are the current API implementation source. The checked-in OpenAPI YAML has not been reconciled with the full current route set and must not be treated as a complete generated contract.
 
-### Workspace commands
+## Prerequisites
+
+- Node.js **24.15.0** (the version in `.node-version` and GitHub Actions)
+- pnpm **11.19.0** (the root `packageManager` and GitHub Actions version)
+- PostgreSQL **18** with PostGIS available, either installed locally or through the optional Docker Compose configuration
+- A Supabase project for real web authentication; local API integration tests use test identity fixtures and do not require a live Supabase login
+
+The root `engines.node` field currently advertises a compatibility floor of `>=22.13.0`; the repository-pinned and CI-tested version is 24.15.0. Use the pinned version for local development and CI parity.
+
+## Local development
+
+Install the locked workspace dependencies:
 
 ```sh
-pnpm dev:web
+pnpm install --frozen-lockfile
+```
+
+For a new local PostgreSQL setup, use the guarded Windows setup script:
+
+```powershell
+pnpm db:setup:local
+```
+
+It creates only the dedicated `dealse_dev` database and `dealse_dev_app` role, applies the checked-in migrations, and stops without modifying anything if either already exists. Review the setup script and [database documentation](docs/database-schema.md) before using another PostgreSQL environment. Docker alternatives are `pnpm db:up` and `pnpm db:down`.
+
+Configure local environments with values from your own services:
+
+- API: use [`apps/api/.env.example`](apps/api/.env.example) as the variable reference. On a new database, `pnpm db:setup:local` creates ignored `apps/api/.env` with the app `DATABASE_URL`; add the required OIDC values without replacing that database setting. For an existing local database, create/configure the ignored file deliberately and do not rerun the guarded setup script.
+- Web: [`apps/web/.env.example`](apps/web/.env.example) → ignored `apps/web/.env.local`
+- Playwright test accounts (optional): [`apps/web/e2e/test-accounts.env.example`](apps/web/e2e/test-accounts.env.example) → ignored `apps/web/.env.test.local`
+
+Do not put credentials in this README, source control, browser storage, or client bundles. The API environment contains database/OIDC and server-only media/admin settings. The web example contains the public Supabase URL/key and API origin. Keep Supabase service-role/secret keys on the API server only. Real authenticated E2E credentials belong only in `.env.test.local`; they are not needed for the API integration suite.
+
+The local API listens on port 3001 by default. The web app defaults to Next.js port 3000; to use the commonly configured local port 3100 in PowerShell:
+
+```powershell
+$env:PORT='3100'; pnpm dev:web
+```
+
+Start the API separately with:
+
+```sh
 pnpm dev:api
+```
+
+Health check: `http://127.0.0.1:3001/api/v1/health`.
+
+## Database and migrations
+
+The Prisma schema and additive migrations live in `apps/api/prisma/`. The repository currently contains eight migrations, including account roles, marketplace fields, moderation, notifications, Admin support, and the one-issued-code-per-customer/deal constraint. They preserve redemption history; the latest index applies only to issued claims. The local `dealse_dev` database was previously verified with all eight applied. Production has not been migrated.
+
+Inspect migration state and apply pending migrations only to the intended development database:
+
+```sh
+pnpm --filter @dealse/api exec prisma migrate status
+pnpm --filter @dealse/api db:migrate:deploy
+```
+
+For schema development on a disposable local database, the API also exposes `pnpm --filter @dealse/api db:migrate:dev`. Do not use development migration commands against production. Review [the schema and migration notes](docs/database-schema.md) before changing persistent data.
+
+## Development and verification commands
+
+```sh
+# Development servers
+pnpm dev:api
+pnpm dev:web
+
+# Native app shells only; native product workflows are not implemented
 pnpm dev:customer
 pnpm dev:retailer
-pnpm db:setup:local
+
+# API checks
+pnpm --filter @dealse/api lint
+pnpm --filter @dealse/api typecheck
+pnpm --filter @dealse/api test
+pnpm --filter @dealse/api build
+
+# Web checks
+pnpm --filter @dealse/web lint
+pnpm --filter @dealse/web typecheck
+pnpm --filter @dealse/web test:e2e
+pnpm --filter @dealse/web build
+
+# Workspace lint, typecheck and production builds
 pnpm check
 ```
 
-### Local database
+The API suite requires PostgreSQL/PostGIS. Playwright may use real disposable accounts from the optional test env file; tests that require unavailable credentials skip rather than creating mocked authenticated sessions. CI also runs API integration tests against PostgreSQL/PostGIS and a Chromium browser job for the public web acceptance paths. For exact scope and latest local results, see the [readiness audit](docs/mvp-readiness-audit.md).
 
-Use the installed PostgreSQL 18 service; Docker is not required. Run `pnpm db:setup:local`. The script verifies service readiness and PostGIS, asks for the PostgreSQL `postgres` password through a hidden prompt, and stops without changing anything if `dealse_dev` or `dealse_dev_app` already exists. Otherwise it creates the dedicated local database and least-privilege app role, writes `DATABASE_URL` to the gitignored `apps/api/.env`, applies the existing Prisma migrations, and verifies the app connection and PostGIS. It never changes or removes another database. The Prisma client is generated by the API typecheck/build scripts.
+## Deployment status and roadmap
 
-The first P0 data model and migration are documented in [`docs/database-schema.md`](docs/database-schema.md). The initial migration is applied to local `dealse_dev`; verify it with `pnpm --filter @dealse/api exec prisma migrate status` after future schema changes.
+No production deployment is claimed. Production hosting/domain/TLS, production database and Supabase configuration, private object storage/CDN, monitoring, backups/restore drills, incident operations, and migration rollback procedures remain open. A staging plan is documented in [the architecture](docs/architecture.md), but staging deployment itself is not verified. Future deployment work should provision isolated staging and production services, use reviewed compatible migrations, and establish monitored backup/restore and rollback procedures before a production release.
 
-Protected API routes use the provider-neutral OIDC guard. Set `OIDC_PROVIDER_ID`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, and `OIDC_JWKS_URL` in `apps/api/.env` before calling protected routes; `/api/v1/health` stays public. The API verifies access tokens but does not issue or refresh them; the selected managed identity provider will own sign-in and refresh sessions.
+## Documentation
 
-The first retailer API slice is implemented at `POST /api/v1/retailers`, `GET /api/v1/retailers/mine`, and `GET`/`POST /api/v1/retailers/{retailerId}/stores`. After configuring the OIDC provider and applying the local migration, new retailers are pending and new stores are drafts. Active owners/managers can create stores, and active retailer members can list their retailer's stores. See [`packages/contracts/openapi.yaml`](packages/contracts/openapi.yaml) for request and response shapes.
-
-`@dealse/api-client` provides a typed `fetch` client for the current OpenAPI operations. Pass an access-token callback backed by platform secure storage; the client intentionally does not persist credentials itself.
-
-The two mobile shells use Expo Router. Install and configure Expo SDK-compatible packages with `pnpm --filter @dealse/customer-mobile exec expo install ...` and the matching retailer command when implementing native capabilities. Do not add app features during foundation setup.
-
-## Product prototype
-
-`prototype/` remains separately installable with its own `npm install` and scripts. Its Worker/D1 files are historical experiments, not the production API or database. Do not move or overwrite the prototype's Sites packaging files as part of monorepo work.
-
-The prototype now includes customer and retailer sign-in/profile previews. These flows use session-only mock data; production authentication and persistence will be implemented in the Next.js/React Native apps against the NestJS API and the selected identity provider.
+- [Architecture and deployment decisions](docs/architecture.md)
+- [Backend integration status and remaining plan](docs/backend-integration-plan.md)
+- [MVP readiness and verification evidence](docs/mvp-readiness-audit.md)
+- [REST API route reference](docs/api-routes.md)
+- [PostgreSQL/Prisma schema and migration notes](docs/database-schema.md)
+- [Local Admin setup](docs/admin-backoffice-local-setup.md)
+- [Design system](docs/design-system.md)
+- [ADR index](docs/adr/)

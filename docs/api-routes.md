@@ -1,6 +1,6 @@
 # DealSe REST API route reference
 
-**Status:** Manually maintained route inventory from the NestJS controllers. There is not yet a generated OpenAPI document; DTOs and controllers remain the contract source. Base path is `/api/v1`.
+**Status (reviewed 2026-11-14):** Manually maintained route inventory from the current NestJS controllers. `packages/contracts/openapi.yaml` is a legacy, incomplete contract and is not generated or kept in sync with this route set. Treat controllers and DTOs as authoritative until contract reconciliation and drift checks are implemented. Base path is `/api/v1`.
 
 ## Authentication and response rules
 
@@ -39,6 +39,22 @@
 | `DELETE /media/:mediaId?retailerId=:retailerId` | Retailer owner/manager | Detach and soft-delete an image, scoped to the retailer that owns its target record. |
 | `GET /media/:mediaId/content` | Public for any image attached to a visible store or currently public deal (including a featured product image); otherwise active retailer member | Serve optimized image bytes. Optional bearer auth enables retailer previews; private/unknown assets return 404. |
 
+## Administrator and invitation management
+
+All `/admin/admin-users` routes require `ADMIN`, verified `aal2`, an active Admin account and `admins.manage`. The invitation acceptance endpoint requires an authenticated invited identity; invite delivery depends on API-only Supabase Admin configuration.
+
+| Method and path | Access | Purpose |
+|---|---|---|
+| `GET /admin/admin-users` | Admin + `admins.manage` | Search/filter and paginate administrator accounts, permissions and invitation status. |
+| `GET /admin/admin-users/:adminId` | Admin + `admins.manage` | Read an administrator record and its audit history, subject to manager hierarchy rules. |
+| `GET /admin/admin-users/invitations` | Admin + `admins.manage` | List active invitations. |
+| `POST /admin/admin-users/invitations` | Admin + `admins.manage` | Invite an administrator with an allowed role and explicit permissions; Root Admin cannot be invited. |
+| `POST /admin/admin-users/invitations/:invitationId/resend` | Admin + `admins.manage` | Resend an eligible invitation with an audit reason. |
+| `POST /admin/admin-users/invitations/:invitationId/revoke` | Admin + `admins.manage` | Revoke an invitation with an audit reason. |
+| `POST /auth/admin-invitations/accept` | Authenticated invitee | Accept an invitation belonging to the authenticated identity. |
+| `PATCH /admin/admin-users/:adminId` | Admin + `admins.manage` | Change permitted role/permission assignments, subject to Root/Super Admin hierarchy rules. |
+| `POST /admin/admin-users/:adminId/{suspend,reactivate,revoke}` | Admin + `admins.manage` | Change an Admin account's status with an audited reason. |
+
 ## Customer discovery and engagement
 
 | Method and path | Access | Purpose |
@@ -74,7 +90,9 @@ In-app notices are persisted in PostgreSQL. Publishing creates a retailer confir
 | `GET /admin/redemptions` and `GET /admin/redemptions/:redemptionId` | Admin + AAL2 + `redemptions.read` | Inspect redemption records. |
 | `GET /admin/redemption-claims` and `GET /admin/redemption-claims/:claimId` | Admin + AAL2 + `redemptions.read` | Inspect claim metadata and its redemption/audit linkage. Credential hashes are not exposed. |
 
-QR credentials are high-entropy random values. PostgreSQL stores only SHA-256 hashes. The raw credential is returned only on issuance/rotation and cannot be retrieved again; if the customer loses it before expiry, the current V1 API requires waiting until expiry before rotating. Credentials expire after five minutes or at the earlier deal end. Outstanding claims do not reserve global offer capacity; only successful redemptions increment the deal count. Confirmation and audit writes are atomic, and a repeated confirmation with the same store-scoped idempotency key, actor and credential returns the original result.
+QR credentials are high-entropy random values. PostgreSQL stores only SHA-256 hashes. The raw credential is returned only on issuance/rotation and cannot be retrieved again; a lost credential cannot be rotated until its claim is expired and unused. Credentials expire after five minutes or at the earlier deal end. The authenticated session supplies the customer identity; a caller cannot choose a customer ID. At issue and confirmation, the service checks `perCustomerLimit` using redemptions filtered by both `dealId` and that customer ID, independently from the global `maxRedemptions`/`redemptionCount` cap. Claims do not reserve global capacity; only successful confirmations increment the count. Confirmation and audit writes are atomic, and a repeated confirmation with the same store-scoped idempotency key, actor and credential returns the original result.
+
+Capacity failures return HTTP `409`: the global-capacity response is distinct from the per-customer response. A different customer's redemption does not count toward the current caller's per-customer limit.
 
 ## Admin operations
 
@@ -83,16 +101,21 @@ All endpoints below require both the database `ADMIN` role and verified AAL2.
 | Method and path | Purpose |
 |---|---|
 | `GET /admin/overview` | Counts for pending retailers, unreviewed stores, published offers and open reports. |
-| `GET /admin/retailers?status=pending\|active\|suspended\|closed` | Paginated retailer review/status list; defaults to pending. |
+| `GET /admin/retailers?status=...` | Paginated retailer review/status list; defaults to pending and supports status/search filters. |
 | `POST /admin/retailers/:retailerId/approve` | Approve a pending retailer. |
+| `POST /admin/retailers/:retailerId/reject` | Reject an application with a reason and audit record. |
 | `POST /admin/retailers/:retailerId/suspend` | Suspend an active retailer. Body: `{ "reason": "…" }`. |
 | `POST /admin/retailers/:retailerId/reactivate` | Reactivate a suspended retailer. |
-| `GET /admin/stores?status=draft\|pending_verification\|active\|paused\|closed` | Paginated store review list; defaults to draft and pending verification. Includes `hasCoordinates`. |
+| `GET /admin/stores?status=...` | Paginated store review/status list; defaults to draft and pending verification. Includes `hasCoordinates` and supports filters. |
 | `POST /admin/stores/:storeId/verify` | Activate a store only after retailer approval and coordinate validation; records verifier/time. |
-| `POST /admin/stores/:storeId/pause` | Pause an active store. Body: `{ "reason": "…" }`. |
-| `POST /admin/stores/:storeId/resume` | Resume a previously verified paused store if its retailer is active. |
-| `GET /admin/deals?status=draft\|published\|paused\|ended` | Paginated offer moderation list; defaults to published. |
+| `POST /admin/stores/:storeId/reject` | Reject store verification with a reason and audit record. |
+| `POST /admin/stores/:storeId/{pause,suspend}` | Pause/suspend a store with a reason. |
+| `POST /admin/stores/:storeId/{resume,reactivate}` | Resume a previously verified paused/suspended store if its retailer is active. |
+| `GET /admin/deals?status=...` | Paginated offer moderation list; defaults to published and supports status/search filters. |
+| `POST /admin/deals/:dealId/approve` | Approve and publish an eligible offer. |
+| `POST /admin/deals/:dealId/reject` | Reject an offer with a reason and audit record. |
 | `POST /admin/deals/:dealId/pause` | Place a published offer on moderation hold. Body: `{ "reason": "…" }`. Public visibility is removed immediately. |
+| `POST /admin/deals/:dealId/{resume,reactivate}` | Resume an eligible paused/suspended offer. |
 | `POST /admin/deals/:dealId/release` | Clear moderation hold and return the offer to draft; the retailer must review and republish. |
 | `GET /admin/categories` | List categories including inactive ones. |
 | `POST /admin/categories` | Create a category. Body: `{ "slug": "…", "name": "…", "sortOrder"?: 0 }`. |
@@ -105,4 +128,4 @@ State-changing admin actions and their audit snapshots are committed in one data
 
 ## Not yet exposed
 
-There is no analytics event API or generated OpenAPI artifact in the current application. The media API supports local development storage and a Supabase Storage adapter; production bucket configuration remains a deployment prerequisite. See [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for current implementation and verification status.
+There is no analytics event API. The checked-in OpenAPI YAML is legacy/incomplete and needs reconciliation with current controllers before it can be used as a complete contract or client-generation source. Retailer redemption analytics and Root Admin redemption reports are not implemented; current retailer history and Admin record inspection are implemented. The media API supports local development storage and a Supabase Storage adapter; private production bucket configuration remains a deployment prerequisite. See [`mvp-readiness-audit.md`](mvp-readiness-audit.md) for implementation and verification status.
