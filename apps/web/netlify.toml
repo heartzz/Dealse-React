@@ -1,0 +1,12 @@
+# Run the CLI from the repository root with --filter @dealse/web.
+# Paths are relative to the repository root (the build base).
+[build]
+  command = "pnpm --filter @dealse/web build"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "24.15.0"
+  PNPM_VERSION = "11.19.0"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

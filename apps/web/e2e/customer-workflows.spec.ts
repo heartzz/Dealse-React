@@ -76,10 +76,25 @@ test("customer discovery uses live filters, explicit location, cards and canonic
   await expect(page.getByRole("button", { name: "Stop using your location" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".toast")).toContainText("within 10 km");
   await page.getByRole("button", { name: "Stop using your location" }).click();
-  await page.getByRole("button", { name: "See all local deals" }).click();
-
+  // Hold a real search action so the loading-state assertion cannot race a
+  // fast local response. The request still reaches the real API when released.
+  await expect.poll(() => pendingActions.size, { timeout: 60_000 }).toBe(0);
+  let releaseSearch!: () => void;
+  const searchGate = new Promise<void>((resolve) => { releaseSearch = resolve; });
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST" && route.request().headers()["next-action"]) await searchGate;
+    await route.continue();
+  });
   const refreshStatus = page.getByTestId("marketplace-loading");
-  await expect(refreshStatus).toBeVisible({ timeout: 5_000 });
+  try {
+    await page.getByLabel("Search stores, products or deals").fill(deal.title);
+    await expect(refreshStatus).toBeVisible({ timeout: 5_000 });
+  } finally {
+    releaseSearch();
+  }
+  await expect.poll(() => pendingActions.size, { timeout: 60_000 }).toBe(0);
+  await page.unroute("**/*");
+  await page.getByRole("button", { name: "See all local deals" }).click();
   await expect(refreshStatus).toBeHidden({ timeout: 60_000 });
   await expect.poll(() => pendingActions.size, { timeout: 60_000, message: "marketplace filter/location server actions should complete before navigation" }).toBe(0);
   await page.goto("/");

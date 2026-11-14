@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main]
@@ -12,6 +13,8 @@ jobs:
   foundation:
     name: Lint, typecheck, and build workspace
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://build:build@localhost:5432/build
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,6 +26,8 @@ jobs:
           node-version: 24.15.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec eslint scripts/deploy/*.mjs scripts/ci/*.mjs
+      - run: node --test scripts/deploy/render.test.mjs
       - run: pnpm check
 
   api-integration:
@@ -99,6 +104,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @dealse/api db:generate
       - run: pnpm --filter @dealse/api db:migrate:deploy
+      - run: node scripts/ci/create-retailer-fixture.mjs
       - run: pnpm --filter @dealse/api db:seed:demo
       - run: pnpm --filter @dealse/web exec playwright install --with-deps chromium
       - run: pnpm --filter @dealse/web test:e2e

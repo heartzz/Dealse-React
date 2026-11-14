@@ -131,6 +131,8 @@ The API suite requires PostgreSQL/PostGIS. Playwright may use real disposable ac
 
 ## Deployment status and roadmap
 
+Token-based staging deployment files are available for Netlify and Render, triggered by pushes to `stabilization/retailer-offer-workflow`. Follow [deployment setup](docs/deployment.md) for first-image bootstrap, private registry access, service IDs, environment variables and rollback. Cloud setup and a successful hosted deployment are not yet verified.
+
 No production deployment is claimed. Production hosting/domain/TLS, production database and Supabase configuration, private object storage/CDN, monitoring, backups/restore drills, incident operations, and migration rollback procedures remain open. A staging plan is documented in [the architecture](docs/architecture.md), but staging deployment itself is not verified. Future deployment work should provision isolated staging and production services, use reviewed compatible migrations, and establish monitored backup/restore and rollback procedures before a production release.
 
 ## Documentation

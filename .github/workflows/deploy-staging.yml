@@ -1,0 +1,120 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [stabilization/retailer-offer-workflow]
+  workflow_dispatch:
+    inputs:
+      image_only:
+        description: 'Bootstrap: test and publish the API image without deploying services'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Do not cancel an in-flight rollout: API and website must finish in sequence.
+concurrency:
+  group: dealse-staging
+  cancel-in-progress: false
+
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/stabilization/retailer-offer-workflow'
+    steps:
+      - name: Explain bootstrap mode
+        if: vars.STAGING_DEPLOY_ENABLED != 'true' || inputs.image_only == true
+        run: echo 'Bootstrap mode — CI and API image only. Complete docs/deployment.md, then set STAGING_DEPLOY_ENABLED=true to deploy both services.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Check deployment configuration
+        if: vars.STAGING_DEPLOY_ENABLED == 'true' && inputs.image_only != true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          DEALSE_API_URL: ${{ vars.DEALSE_API_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          missing=0
+          for name in NETLIFY_AUTH_TOKEN RENDER_API_KEY NETLIFY_SITE_ID RENDER_SERVICE_ID DEALSE_API_URL NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing $name. Follow docs/deployment.md before deploying."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+  checks:
+    needs: configuration
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.reference.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name
+        id: name
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "image=ghcr.io/${REPOSITORY,,}-api" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: infra/deploy/api.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.name.outputs.image }}:${{ github.sha }}
+      - name: Record immutable image
+        id: reference
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "image=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "API image: \`$IMAGE@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    needs: image
+    if: vars.STAGING_DEPLOY_ENABLED == 'true' && inputs.image_only != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - name: Deploy API and wait for health
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          API_IMAGE: ${{ needs.image.outputs.image }}
+          DEALSE_API_URL: ${{ vars.DEALSE_API_URL }}
+        run: node scripts/deploy/render.mjs
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Build and deploy Next.js with the Netlify adapter
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          DEALSE_API_URL: ${{ vars.DEALSE_API_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: pnpm --package=netlify-cli@27.19.0 dlx netlify deploy --build --prod --filter @dealse/web

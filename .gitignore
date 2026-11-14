@@ -35,3 +35,6 @@ Thumbs.db
 **/.npm-cache/
 apps/api/src/generated/prisma/
 **/.local-media/
+
+# Local deployment state (site IDs, generated functions and CLI artifacts)
+.netlify/
