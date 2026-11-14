@@ -1,8 +1,11 @@
 # Token-based staging deployment
 
-This guide targets `stabilization/retailer-offer-workflow`. Files are prepared for
-Netlify + Render + Aiven + Supabase; this is not evidence of a live deployment.
+This guide targets `stabilization/retailer-offer-workflow`. The deployment uses
+Netlify + Render + Aiven + Supabase; hosted verification is recorded below.
 No direct Netlify/Render GitHub repository integration is required.
+
+For changing platform accounts, migrating existing data and handing over ownership,
+use the [infrastructure runbook](../infra/README.md).
 
 ## 1. GitHub configuration
 
@@ -226,3 +229,13 @@ Provider credentials and setup state are kept only in ignored local files and
 provider/GitHub secret stores. Rotate credentials shared during setup and update
 all corresponding stores; the GHCR read credential is held by Render, while image
 publishing uses the workflow's short-lived `GITHUB_TOKEN`.
+
+## Custom domain verification (2026-11-15)
+
+`https://dealse.app` serves the deployed marketplace, with `www.dealse.app`
+redirecting to the apex and valid HTTPS for both names. Supabase site/allowed
+redirect URLs and Render `ADMIN_INVITE_REDIRECT_URL` were updated. Render
+redeployment completed and API health returned HTTP 200. Customer/retailer login
+pages loaded and anonymous admin access redirected to login. These checks do not
+verify email delivery or authenticated user journeys. See the infrastructure
+runbook for DNS values and future account moves.

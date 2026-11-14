@@ -131,11 +131,13 @@ The API suite requires PostgreSQL/PostGIS. Playwright may use real disposable ac
 
 ## Deployment status and roadmap
 
-Token-based staging deployment files are available for Netlify and Render, triggered by pushes to `stabilization/retailer-offer-workflow`. Follow [deployment setup](docs/deployment.md) for first-image bootstrap, private registry access, service IDs, environment variables and rollback. Cloud setup and a successful hosted deployment are not yet verified.
+Token-based staging deployment files are available for Netlify and Render, triggered by pushes to `stabilization/retailer-offer-workflow`. Follow [deployment setup](docs/deployment.md) for first-image bootstrap, private registry access, service IDs, environment variables and rollback. The hosted staging deployment and automatic branch deployment have been verified; the website now uses `https://dealse.app`. See the [infrastructure handover runbook](infra/README.md) for account changes and the deployment guide for verification boundaries.
 
-No production deployment is claimed. Production hosting/domain/TLS, production database and Supabase configuration, private object storage/CDN, monitoring, backups/restore drills, incident operations, and migration rollback procedures remain open. A staging plan is documented in [the architecture](docs/architecture.md), but staging deployment itself is not verified. Future deployment work should provision isolated staging and production services, use reviewed compatible migrations, and establish monitored backup/restore and rollback procedures before a production release.
+The public domain and TLS do not establish production readiness. Real-user acceptance, security dependency remediation, monitoring, backups/restore drills, incident operations and migration rollback verification remain open. The services retain staging names. Future production work should establish the required isolation and operational checks described in [the architecture](docs/architecture.md).
 
 ## Documentation
+
+- [Infrastructure account transfer and migration runbook](infra/README.md)
 
 - [Architecture and deployment decisions](docs/architecture.md)
 - [Backend integration status and remaining plan](docs/backend-integration-plan.md)
