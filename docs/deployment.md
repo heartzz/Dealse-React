@@ -201,3 +201,28 @@ The browser loading-state assertion now holds and releases a real server action
 instead of requiring a fast transient indicator to remain visible. Authenticated
 browser tests still require dedicated live test accounts. Hosted credentials,
 registry pulls, HTTPS acceptance and automatic deployment remain unverified.
+
+## Hosted staging setup (2026-11-15)
+
+The preparation-only limitations above were subsequently resolved for the initial
+hosted deployment:
+
+- Web: https://hey-02e0f6.netlify.app (Netlify free; production public, previews private).
+- API: https://dealse-api-staging.onrender.com (Render free, Singapore, private GHCR image).
+- All eight existing migrations applied successfully to the isolated Aiven staging
+  database. No demo catalogue or synthetic retailer identities were seeded there.
+- Runtime database access uses a separate non-superuser role with a ten-connection
+  limit and verified TLS using the Aiven CA. Migration-table access is revoked.
+- Supabase Auth redirect URLs point to the website; media bucket remains private.
+  SMTP configuration is present, but email delivery and authenticated user journeys
+  have not been verified with a real test account.
+- Initial GitHub bootstrap run 43634939521 passed. Its Linux AMD64 image was pulled
+  and started successfully by Render. API health/discovery and web home/login
+  returned HTTP 200; anonymous admin access redirected to login.
+- Repository variable `STAGING_DEPLOY_ENABLED` is enabled for subsequent branch
+  pushes. Release verification is recorded in GitHub Actions.
+
+Provider credentials and setup state are kept only in ignored local files and
+provider/GitHub secret stores. Rotate credentials shared during setup and update
+all corresponding stores; the GHCR read credential is held by Render, while image
+publishing uses the workflow's short-lived `GITHUB_TOKEN`.

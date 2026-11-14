@@ -38,3 +38,5 @@ apps/api/src/generated/prisma/
 
 # Local deployment state (site IDs, generated functions and CLI artifacts)
 .netlify/
+
+.local-deploy/
