@@ -46,8 +46,10 @@ let highDiscountId = "";
 let nearestDealId = "";
 let hiddenId = "";
 let expiredId = "";
+let nullLocationDealId = "";
 let retailerConfirmationId = "";
 let customerAnnouncementId = "";
+let nullLocationStoreId = "";
 
 before(async () => {
   await prisma.$connect();
@@ -67,7 +69,7 @@ before(async () => {
 after(async () => {
   if (retailerIds.length) {
     await prisma.$transaction(async (tx) => {
-      const dealIds = [draftId, nullableDraftId, publishedId, highDiscountId, nearestDealId, hiddenId, expiredId].filter(Boolean);
+      const dealIds = [draftId, nullableDraftId, publishedId, highDiscountId, nearestDealId, hiddenId, expiredId, nullLocationDealId].filter(Boolean);
       await tx.dealReport.deleteMany({ where: { OR: [{ id: { in: reportIds } }, { reporterUserId: { in: users } }, { reviewedByUserId: { in: users } }] } });
       await tx.notification.deleteMany({ where: { userId: { in: users } } });
       await tx.followedStore.deleteMany({ where: { userId: { in: users } } });
@@ -78,7 +80,7 @@ after(async () => {
         await tx.deal.deleteMany({ where: { id: { in: dealIds } } });
       }
       if (productId) await tx.product.deleteMany({ where: { id: productId } });
-      await tx.store.deleteMany({ where: { id: { in: [storeId, nearbyStoreId].filter(Boolean) } } });
+      await tx.store.deleteMany({ where: { id: { in: [storeId, nearbyStoreId, nullLocationStoreId].filter(Boolean) } } });
       await tx.retailerMembership.deleteMany({ where: { retailerId: { in: retailerIds } } });
       await tx.retailer.deleteMany({ where: { id: { in: retailerIds } } });
       await tx.category.deleteMany({ where: { id: categoryId } });
@@ -228,6 +230,11 @@ test("nearby discovery returns only active deals within the requested PostGIS ra
   assert.equal(nearby.items[0].id, publishedId);
   assert.equal(nearby.items[0].distanceMeters, 0);
 
+  const suppliedHomepageLocation = await dealsService.discover({
+    page: 1, limit: 100, city: "Ahmedabad", latitude: 22.992086, longitude: 72.630954, radiusKm: 10, sort: "newest",
+  });
+  assert.equal(suppliedHomepageLocation.items.some((item) => item.id === publishedId), true, "a published Ahmedabad offer within the homepage radius is returned");
+
   const outsideRadius = await dealsService.discover({
     page: 1, limit: 20, q: suffix.slice(0, 8), latitude: 24.0225, longitude: 72.5714, radiusKm: 1,
   });
@@ -240,6 +247,26 @@ test("nearby discovery returns only active deals within the requested PostGIS ra
     dealsService.discover({ page: 1, limit: 20, sort: "best" as "newest" }),
     (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error && typeof error.getStatus === "function" && error.getStatus() === 400,
   );
+});
+
+test("nearby discovery safely excludes deals from stores without coordinates", async () => {
+  const store = await retailers.createStore(retailerUser, retailerId, {
+    slug: `unmapped-${suffix.slice(0, 8)}`, name: `Unmapped Store ${suffix.slice(0, 8)}`, categoryId,
+    city: "Ahmedabad", region: "Gujarat", countryCode: "IN", timezone: "Asia/Kolkata",
+  });
+  nullLocationStoreId = store.id;
+  const deal = await dealsService.create(retailerUser, retailerId, {
+    title: `Unmapped location offer ${suffix.slice(0, 8)}`, terms: "Integration test only.", storeId: store.id, categoryId,
+    offerType: "PERCENTAGE" as never, discountBps: 1000,
+    startsAt: new Date(Date.now() - 60_000).toISOString(), endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  nullLocationDealId = deal.id;
+  await prisma.deal.update({ where: { id: deal.id }, data: { status: DealStatus.PUBLISHED, publishedAt: new Date() } });
+
+  const result = await dealsService.discover({
+    page: 1, limit: 20, q: `Unmapped location offer ${suffix.slice(0, 8)}`, latitude: 22.992086, longitude: 72.630954, radiusKm: 10,
+  });
+  assert.equal(result.items.some((item) => item.id === deal.id), false);
 });
 
 test("nearby discovery sorts by actual PostGIS distance", async () => {

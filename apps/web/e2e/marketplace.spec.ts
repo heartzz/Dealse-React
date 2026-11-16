@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { marketplaceDiscoveryPath } from "../src/lib/marketplace-query";
 
 const apiOrigin = process.env.DEALSE_E2E_API_URL || "http://127.0.0.1:3102";
 
@@ -26,6 +27,7 @@ test("customer marketplace loads live deals and canonical deal/store pages", asy
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Good offers from great local stores/i })).toBeVisible();
+  await expect(page.getByText(deal.title, { exact: true }).first()).toBeVisible();
   await expect(page.locator(".demo-catalogue-note")).toContainText("fictional retailers and offers");
 
   const heroImage = page.locator(".hero-main-photo img");
@@ -50,6 +52,18 @@ test("customer marketplace loads live deals and canonical deal/store pages", asy
       message: `store detail should fit a ${width}px viewport`,
     }).toBeTruthy();
   }
+});
+
+test("marketplace discovery leaves All categories unrestricted and keeps the nearby radius", async () => {
+  const path = marketplaceDiscoveryPath("", "All", "Ahmedabad", 22.992086, 72.630954, "newest");
+  const params = new URL(path, "http://localhost").searchParams;
+
+  expect(params.get("category")).toBeNull();
+  expect(params.get("latitude")).toBe("22.992086");
+  expect(params.get("longitude")).toBe("72.630954");
+  expect(params.get("radiusKm")).toBe("10");
+  expect(params.get("sort")).toBe("newest");
+  expect(params.get("city")).toBeNull();
 });
 
 test("customer and retailer dashboards require an authenticated session", async ({ page }) => {

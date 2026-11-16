@@ -67,7 +67,18 @@ async function login(flow: Flow, formData: FormData): Promise<string | null> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.session) return "auth";
+    if (error) {
+      console.warn("[DealSe Auth] password sign-in rejected", {
+        flow,
+        code: error.code ?? null,
+        status: error.status,
+      });
+      return "auth";
+    }
+    if (!data.session) {
+      console.warn("[DealSe Auth] password sign-in returned no session", { flow });
+      return "auth";
+    }
 
     const user = await callDealseApi<DealSeUser>("/auth/me", data.session.access_token);
     if (flow === "retailer" && !user.roles.includes("retailer")) return "retailer_setup";

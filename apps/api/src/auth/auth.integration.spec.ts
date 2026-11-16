@@ -99,6 +99,38 @@ test("Supabase identity provisions PostgreSQL customer profile and retailer role
   );
 });
 
+test("same-email Supabase subjects resolve to separate users without inheriting retailer access", async () => {
+  const email = `shared-${suffix}@example.invalid`;
+  const firstIdentity = {
+    providerId: "supabase-test",
+    subject: `first-${suffix}`,
+    email,
+    emailVerified: true,
+  };
+  const secondIdentity = {
+    ...firstIdentity,
+    subject: `second-${suffix}`,
+  };
+
+  const first = await auth.resolveIdentity(firstIdentity);
+  userIds.push(first.userId);
+  const retailer = await retailers.createRetailer(first, {
+    displayName: `Identity isolation ${suffix.slice(0, 8)}`,
+  });
+  retailerIds.push(retailer.id);
+
+  const second = await auth.resolveIdentity(secondIdentity);
+  userIds.push(second.userId);
+  assert.notEqual(second.userId, first.userId);
+  assert.deepEqual(second.roles, [AccountRole.CUSTOMER]);
+  assert.deepEqual(await retailers.listMyRetailers(second), []);
+
+  const firstAgain = await auth.resolveIdentity(firstIdentity);
+  assert.equal(firstAgain.userId, first.userId);
+  assert.ok(firstAgain.roles.includes(AccountRole.RETAILER));
+  assert.deepEqual((await retailers.listMyRetailers(firstAgain)).map(({ id }) => id), [retailer.id]);
+});
+
 test("retailer role guard rejects a customer principal", () => {
   const reflector = {
     getAllAndOverride: () => [AccountRole.RETAILER],
