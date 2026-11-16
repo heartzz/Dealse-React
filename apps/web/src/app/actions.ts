@@ -146,9 +146,32 @@ export async function loginAdmin(formData: FormData): Promise<void> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.session) redirect("/admin/login?error=auth");
+    if (error) {
+      console.warn("[DealSe Admin Auth] password sign-in rejected", {
+        stage: "supabase_password_sign_in",
+        code: typeof error.code === "string" && /^[a-z0-9_]+$/i.test(error.code) ? error.code : "unknown",
+        status: typeof error.status === "number" ? error.status : null,
+        sessionReturned: false,
+      });
+      redirect("/admin/login?error=auth");
+    }
+    if (!data.session) {
+      console.warn("[DealSe Admin Auth] password sign-in returned no session", {
+        stage: "supabase_password_sign_in",
+        sessionReturned: false,
+      });
+      redirect("/admin/login?error=auth");
+    }
+    console.info("[DealSe Admin Auth] password sign-in returned a session", {
+      stage: "supabase_password_sign_in",
+      sessionReturned: true,
+    });
     const user = await callDealseApi<DealSeUser>("/auth/me", data.session.access_token);
     if (!user.roles.includes("admin")) {
+      console.warn("[DealSe Admin Auth] API identity lacks the admin role", {
+        stage: "api_identity_role_check",
+        adminRole: false,
+      });
       await supabase.auth.signOut({ scope: "local" });
       redirect("/admin/login?error=unauthorized");
     }
@@ -156,7 +179,7 @@ export async function loginAdmin(formData: FormData): Promise<void> {
     if (error && typeof error === "object" && "digest" in error) throw error;
     redirect(`/admin/login?error=${errorCode(error)}`);
   }
-  redirect("/admin/dashboard");
+  redirect("/admin");
 }
 
 export async function createRetailerProfile(formData: FormData): Promise<void> {

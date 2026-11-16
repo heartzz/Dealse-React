@@ -232,7 +232,8 @@ test("NestJS accepts a signed issuer/audience-bound token and rejects a forged s
       });
       const meBody = await meResponse.text();
       assert.equal(meResponse.status, 200, meBody);
-      const me = JSON.parse(meBody) as { roles: string[]; profile: { displayName: string | null } };
+      const me = JSON.parse(meBody) as { id: string; roles: string[]; profile: { displayName: string | null } };
+      assert.equal(me.id, request.authPrincipal?.userId, "the verified Supabase subject maps to the persisted DealSe user id");
       assert.deepEqual(me.roles, ["customer"]);
       assert.equal(me.profile.displayName, null);
 
@@ -314,6 +315,18 @@ test("NestJS accepts a signed issuer/audience-bound token and rejects a forged s
         { permission: AdminPermissionKey.ADMINS_MANAGE, path: "/admin/admin-users/invitations", label: "admin invitations" },
       ] as const;
       await prisma.adminAccount.update({ where: { userId: request.authPrincipal.userId }, data: { role: AdminRole.ROOT_ADMIN } });
+      const mappedRootResponse = await fetch(`${apiOrigin}/api/v1/auth/me`, { headers: authorization });
+      const mappedRootBody = await mappedRootResponse.text();
+      assert.equal(mappedRootResponse.status, 200, mappedRootBody);
+      const mappedRoot = JSON.parse(mappedRootBody) as { id: string; roles: string[] };
+      assert.equal(mappedRoot.id, request.authPrincipal.userId, "admin role remains attached to the same Supabase subject mapping");
+      assert.deepEqual([...mappedRoot.roles].sort(), ["admin", "customer", "retailer"]);
+      const rootAccessResponse = await fetch(`${apiOrigin}/api/v1/admin/me`, { headers: authorization });
+      const rootAccessBody = await rootAccessResponse.text();
+      assert.equal(rootAccessResponse.status, 200, rootAccessBody);
+      const rootAccess = JSON.parse(rootAccessBody) as { role: string; status: string };
+      assert.equal(rootAccess.role, AdminRole.ROOT_ADMIN);
+      assert.equal(rootAccess.status, AdminAccountStatus.ACTIVE);
       for (const check of moduleChecks) {
         const response = await fetch(`${apiOrigin}/api/v1${check.path}`, { headers: authorization });
         const body = await response.text();

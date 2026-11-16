@@ -59,6 +59,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     redirect("/admin/login?error=setup");
   }
   if (!user.roles.includes("admin")) {
+    console.warn("[DealSe Admin Auth] API identity lacks the admin role", {
+      stage: "api_identity_role_check",
+      adminRole: false,
+    });
     return (
       <main className="admin-shell">
         <header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link><form action={logoutAdmin}><button className="admin-button admin-button--quiet" type="submit">Log out</button></form></header>
@@ -70,13 +74,23 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const supabase = await createSupabaseServerClient();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   if (claimsError || !claimsData?.claims.sub) redirect("/admin/login");
+  const assuranceLevel = claimsData.claims.aal;
+  console.info("[DealSe Admin Auth] MFA assurance evaluated", {
+    stage: "mfa_assurance",
+    assuranceLevel: assuranceLevel === "aal1" || assuranceLevel === "aal2" ? assuranceLevel : "unknown",
+  });
   if (claimsData.claims.aal !== "aal2") {
     const { data: factorData, error: factorError } = await supabase.auth.mfa.listFactors();
     return <main className="admin-shell"><header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link></header><AdminMfaGate hasVerifiedTotp={Boolean(factorData?.totp.length)} hasPendingTotp={Boolean(factorData && pendingAdminTotpFactors(factorData.all).length)} initialError={factorError ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} /></main>;
   }
 
   try {
-    await callDealseApi("/admin/me", accessToken);
+    const adminAccess = await callDealseApi<{ role: string; status: string }>("/admin/me", accessToken);
+    console.info("[DealSe Admin Auth] database admin account accepted", {
+      stage: "database_admin_account",
+      status: adminAccess.status,
+      role: adminAccess.role,
+    });
   } catch {
     redirect("/admin/login?error=unauthorized");
   }
