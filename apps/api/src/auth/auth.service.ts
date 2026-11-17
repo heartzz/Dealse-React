@@ -23,64 +23,72 @@ export class AuthService {
         authSubject: identity.subject,
       },
     };
-    let user = await this.prisma.user.findUnique({ where });
-    try {
-      user ??= await this.prisma.user.create({
-        data: {
-          authProvider: identity.providerId,
-          authSubject: identity.subject,
-          emailNormalized: this.normalizedEmail(identity.email),
-          emailVerifiedAt: identity.emailVerified ? new Date() : null,
-          lastSignedInAt: new Date(),
-          profile: { create: {} },
-          accountRoles: { create: { role: AccountRole.CUSTOMER } },
-        },
-        include: { profile: true, accountRoles: true },
-      });
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-      user = await this.prisma.user.findUnique({ where });
-      if (!user) throw error;
+    const include = { profile: true, accountRoles: true } as const;
+    let user = await this.prisma.user.findUnique({ where, include });
+    let created = false;
+    if (!user) {
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            authProvider: identity.providerId,
+            authSubject: identity.subject,
+            emailNormalized: this.normalizedEmail(identity.email),
+            emailVerifiedAt: identity.emailVerified ? new Date() : null,
+            lastSignedInAt: new Date(),
+            profile: { create: {} },
+            accountRoles: { create: { role: AccountRole.CUSTOMER } },
+          },
+          include,
+        });
+        created = true;
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        user = await this.prisma.user.findUnique({ where, include });
+        if (!user) throw error;
+      }
     }
 
     if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException("This account is not active.");
     }
 
+    // Nested writes remain atomic without holding a long-lived interactive
+    // transaction open across several sequential database round trips.
+    if (created) return this.toPrincipal(user, identity);
+
     const normalizedEmail = this.normalizedEmail(identity.email);
-    return this.prisma.$transaction(async (transaction) => {
-      await transaction.user.update({
-        where: { id: user.id },
-        data: {
-          lastSignedInAt: new Date(),
-          ...(normalizedEmail
-            ? {
-                emailNormalized: normalizedEmail,
-                ...(identity.emailVerified
-                  ? { emailVerifiedAt: user.emailVerifiedAt ?? new Date() }
-                  : user.emailNormalized !== normalizedEmail
-                    ? { emailVerifiedAt: null }
-                    : {}),
-              }
-            : {}),
+    const signedInAt = new Date();
+    const refreshed = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastSignedInAt: signedInAt,
+        ...(normalizedEmail
+          ? {
+              emailNormalized: normalizedEmail,
+              ...(identity.emailVerified
+                ? { emailVerifiedAt: user.emailVerifiedAt ?? signedInAt }
+                : user.emailNormalized !== normalizedEmail
+                  ? { emailVerifiedAt: null }
+                  : {}),
+            }
+          : {}),
+        profile: {
+          upsert: {
+            create: {},
+            update: {},
+          },
         },
-      });
-      await transaction.userProfile.upsert({
-        where: { userId: user.id },
-        create: { userId: user.id },
-        update: {},
-      });
-      await transaction.userAccountRole.upsert({
-        where: { userId_role: { userId: user.id, role: AccountRole.CUSTOMER } },
-        create: { userId: user.id, role: AccountRole.CUSTOMER },
-        update: {},
-      });
-      const refreshed = await transaction.user.findUniqueOrThrow({
-        where: { id: user.id },
-        include: { profile: true, accountRoles: true },
-      });
-      return this.toPrincipal(refreshed, identity);
+        accountRoles: {
+          upsert: {
+            where: { userId_role: { userId: user.id, role: AccountRole.CUSTOMER } },
+            create: { role: AccountRole.CUSTOMER },
+            update: {},
+          },
+        },
+      },
+      include,
     });
+    return this.toPrincipal(refreshed, identity);
   }
 
   async updateProfile(user: AuthPrincipal, displayName: string) {

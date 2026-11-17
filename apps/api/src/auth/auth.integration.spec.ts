@@ -131,6 +131,50 @@ test("same-email Supabase subjects resolve to separate users without inheriting 
   assert.deepEqual((await retailers.listMyRetailers(firstAgain)).map(({ id }) => id), [retailer.id]);
 });
 
+test("concurrent authenticated identity resolution creates one provider-subject mapping", async () => {
+  const identity = {
+    providerId: "supabase-concurrency-test",
+    subject: `concurrent-${suffix}`,
+    email: `concurrent-${suffix}@example.invalid`,
+    emailVerified: true,
+  };
+
+  const principals = await Promise.all(Array.from({ length: 8 }, () => auth.resolveIdentity(identity)));
+  const resolvedIds = [...new Set(principals.map(({ userId }) => userId))];
+  userIds.push(...resolvedIds);
+
+  assert.equal(resolvedIds.length, 1, "all requests resolve the same authenticated provider subject");
+  assert.ok(principals.every(({ roles }) => roles.includes(AccountRole.CUSTOMER)));
+  assert.equal(await prisma.user.count({
+    where: { authProvider: identity.providerId, authSubject: identity.subject },
+  }), 1);
+  assert.equal(await prisma.userAccountRole.count({
+    where: { userId: resolvedIds[0], role: AccountRole.CUSTOMER },
+  }), 1);
+  assert.ok(await prisma.userProfile.findUnique({ where: { userId: resolvedIds[0] } }));
+});
+
+test("failed nested identity creation leaves no partial user, profile, or role records", async () => {
+  const identity = {
+    providerId: "supabase-rollback-test",
+    subject: `rollback-${suffix}`,
+    email: `${"x".repeat(321)}@example.invalid`,
+    emailVerified: true,
+  };
+
+  await assert.rejects(auth.resolveIdentity(identity));
+
+  const user = await prisma.user.findUnique({
+    where: {
+      authProvider_authSubject: {
+        authProvider: identity.providerId,
+        authSubject: identity.subject,
+      },
+    },
+  });
+  assert.equal(user, null, "the failed nested create did not persist an identity row");
+});
+
 test("retailer role guard rejects a customer principal", () => {
   const reflector = {
     getAllAndOverride: () => [AccountRole.RETAILER],
