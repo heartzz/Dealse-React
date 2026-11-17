@@ -103,6 +103,7 @@ jobs:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
           API_IMAGE: ${{ needs.image.outputs.image }}
+          DEPLOY_COMMIT_SHA: ${{ github.sha }}
           DEALSE_API_URL: ${{ vars.DEALSE_API_URL }}
         run: node scripts/deploy/render.mjs
       - uses: pnpm/action-setup@v4
