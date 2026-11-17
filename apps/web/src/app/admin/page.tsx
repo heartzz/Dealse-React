@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { callDealseApi, type DealSeUser } from "../../lib/dealse-api";
+import { callDealseApi, DealseApiError, type DealSeUser } from "../../lib/dealse-api";
 import { requireWebSession } from "../../lib/auth-session";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { logoutAdmin } from "../actions";
@@ -55,7 +55,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   let user: DealSeUser;
   try {
     user = await callDealseApi<DealSeUser>("/auth/me", accessToken);
-  } catch {
+  } catch (error) {
+    console.error("[DealSe Admin Auth] API identity lookup failed", {
+      stage: "api_auth_me",
+      apiStatus: error instanceof DealseApiError ? error.status || null : null,
+      apiCategory: error instanceof DealseApiError ? error.category : "unknown",
+    });
     redirect("/admin/login?error=setup");
   }
   if (!user.roles.includes("admin")) {
@@ -73,7 +78,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const supabase = await createSupabaseServerClient();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
-  if (claimsError || !claimsData?.claims.sub) redirect("/admin/login");
+  if (claimsError || !claimsData?.claims.sub) {
+    console.warn("[DealSe Admin Auth] MFA assurance claims unavailable", {
+      stage: "mfa_assurance",
+      claimsPresent: false,
+      providerErrorCode: claimsError && typeof claimsError.code === "string" && /^[a-z0-9_-]{1,80}$/i.test(claimsError.code) ? claimsError.code : null,
+      providerStatus: claimsError && typeof claimsError.status === "number" && Number.isInteger(claimsError.status) ? claimsError.status : null,
+    });
+    redirect("/admin/login");
+  }
   const assuranceLevel = claimsData.claims.aal;
   console.info("[DealSe Admin Auth] MFA assurance evaluated", {
     stage: "mfa_assurance",
@@ -85,13 +98,20 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   }
 
   try {
-    const adminAccess = await callDealseApi<{ role: string; status: string }>("/admin/me", accessToken);
+    const adminAccess = await callDealseApi<{ role: string; status: string; permissions: string[] }>("/admin/me", accessToken);
     console.info("[DealSe Admin Auth] database admin account accepted", {
       stage: "database_admin_account",
+      apiStatus: 200,
       status: adminAccess.status,
       role: adminAccess.role,
+      permissions: adminAccess.permissions,
     });
-  } catch {
+  } catch (error) {
+    console.error("[DealSe Admin Auth] database admin account rejected", {
+      stage: "database_admin_account",
+      apiStatus: error instanceof DealseApiError ? error.status || null : null,
+      apiCategory: error instanceof DealseApiError ? error.category : "unknown",
+    });
     redirect("/admin/login?error=unauthorized");
   }
 

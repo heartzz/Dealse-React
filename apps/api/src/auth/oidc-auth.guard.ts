@@ -27,10 +27,31 @@ const jwksOptions: RemoteJWKSetOptions = {
   cacheMaxAge: 10 * 60_000,
 };
 
+function safeProviderErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error) || typeof error.code !== "string") return null;
+  return /^[A-Z0-9_]{1,80}$/i.test(error.code) ? error.code : null;
+}
+
+function safeHttpStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object" || !("getStatus" in error) || typeof error.getStatus !== "function") return null;
+  try {
+    const status = error.getStatus();
+    return typeof status === "number" && Number.isInteger(status) ? status : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSupabaseProjectRef(url: URL): string {
+  const match = url.hostname.match(/^([a-z0-9-]+)\.supabase\.co$/i);
+  return match?.[1] ?? "custom-host";
+}
+
 @Injectable()
 export class OidcAuthGuard implements CanActivate {
   private jwksUrl: string | undefined;
   private jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
+  private oidcConfigurationLogged = false;
 
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
@@ -61,7 +82,13 @@ export class OidcAuthGuard implements CanActivate {
         algorithms: ["RS256", "ES256"],
       });
       payload = verified.payload;
-    } catch {
+    } catch (error) {
+      console.warn("[DealSe Auth] provider access token rejected", {
+        stage: "jwt_verification",
+        httpStatus: 401,
+        providerErrorCode: safeProviderErrorCode(error),
+        tokenPresented: true,
+      });
       throw new UnauthorizedException("The access token is invalid or expired.");
     }
 
@@ -76,7 +103,29 @@ export class OidcAuthGuard implements CanActivate {
       emailVerified: payload.email_verified === true,
       assuranceLevel: typeof payload.aal === "string" ? payload.aal : undefined,
     };
-    request.authPrincipal = await this.authService.resolveIdentity(identity);
+    try {
+      request.authPrincipal = await this.authService.resolveIdentity(identity);
+    } catch (error) {
+      console.warn("[DealSe Auth] provider identity could not be mapped", {
+        stage: "identity_mapping",
+        httpStatus: safeHttpStatus(error),
+        identityMapped: false,
+      });
+      throw error;
+    }
+    if (request.url?.split("?", 1)[0]?.endsWith("/auth/me")) {
+      console.info("[DealSe Auth] /auth/me accepted identity", {
+        stage: "api_auth_me",
+        httpStatus: 200,
+        accessTokenAccepted: true,
+        identityMapped: true,
+        accountActive: true,
+        roles: request.authPrincipal.roles.map((role) => role.toLowerCase()),
+        assuranceLevel: request.authPrincipal.assuranceLevel === "aal1" || request.authPrincipal.assuranceLevel === "aal2"
+          ? request.authPrincipal.assuranceLevel
+          : "unknown",
+      });
+    }
     return true;
   }
 
@@ -92,9 +141,20 @@ export class OidcAuthGuard implements CanActivate {
     const audience = process.env.OIDC_AUDIENCE?.trim();
     const jwksUrlValue = process.env.OIDC_JWKS_URL?.trim();
     if (!providerId || !issuer || !audience || !jwksUrlValue) {
+      console.error("[DealSe Auth] Supabase OIDC configuration is incomplete", {
+        stage: "oidc_configuration",
+        providerIdConfigured: Boolean(providerId),
+        issuerConfigured: Boolean(issuer),
+        audienceConfigured: Boolean(audience),
+        jwksUrlConfigured: Boolean(jwksUrlValue),
+      });
       throw new ServiceUnavailableException("OIDC authentication is not configured.");
     }
     if (providerId.length > 64) {
+      console.error("[DealSe Auth] Supabase OIDC provider label is invalid", {
+        stage: "oidc_configuration",
+        providerIdLengthValid: false,
+      });
       throw new ServiceUnavailableException("OIDC_PROVIDER_ID must be at most 64 characters.");
     }
 
@@ -107,8 +167,44 @@ export class OidcAuthGuard implements CanActivate {
       ) {
         throw new Error("HTTPS is required for production OIDC endpoints.");
       }
+      if (!this.oidcConfigurationLogged) {
+        this.oidcConfigurationLogged = true;
+        const configuredSupabaseUrl = process.env.SUPABASE_URL?.trim();
+        let storageProjectMatchesIssuer: boolean | null = null;
+        let storageProjectRef: string | null = null;
+        if (configuredSupabaseUrl) {
+          try {
+            const storageUrl = new URL(configuredSupabaseUrl);
+            storageProjectRef = safeSupabaseProjectRef(storageUrl);
+            storageProjectMatchesIssuer = storageUrl.hostname === issuerUrl.hostname;
+          } catch {
+            storageProjectMatchesIssuer = false;
+          }
+        }
+        const configuration = {
+          stage: "oidc_configuration",
+          issuerProjectRef: safeSupabaseProjectRef(issuerUrl),
+          jwksProjectRef: safeSupabaseProjectRef(jwksUrl),
+          storageProjectRef,
+          providerLabelExpected: providerId === "supabase",
+          issuerPathValid: issuerUrl.pathname.replace(/\/$/, "") === "/auth/v1",
+          issuerAndJwksSameHost: issuerUrl.hostname === jwksUrl.hostname,
+          jwksPathValid: jwksUrl.pathname.replace(/\/$/, "") === "/auth/v1/.well-known/jwks.json",
+          storageProjectMatchesIssuer,
+        };
+        if (!configuration.providerLabelExpected || !configuration.issuerPathValid || !configuration.issuerAndJwksSameHost || !configuration.jwksPathValid || storageProjectMatchesIssuer === false) {
+          console.error("[DealSe Auth] Supabase OIDC configuration is inconsistent", configuration);
+        } else {
+          console.info("[DealSe Auth] Supabase OIDC configuration checked", configuration);
+        }
+      }
       return { providerId, issuer, audience, jwksUrl };
     } catch {
+      console.error("[DealSe Auth] Supabase OIDC endpoint configuration is invalid", {
+        stage: "oidc_configuration",
+        endpointsValid: false,
+        httpsRequired: process.env.NODE_ENV === "production",
+      });
       throw new ServiceUnavailableException("OIDC endpoint configuration is invalid.");
     }
   }

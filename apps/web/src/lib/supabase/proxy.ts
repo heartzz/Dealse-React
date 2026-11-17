@@ -8,6 +8,8 @@ export async function updateSupabaseSession(request: NextRequest) {
 
   let response = NextResponse.next({ request });
   const secure = process.env.NODE_ENV === "production";
+  const authCookiePresent = request.cookies.getAll().some(({ name }) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name));
+  let sessionCookiesRefreshed = false;
   const supabase = createServerClient(url, key, {
     cookieOptions: {
       httpOnly: true,
@@ -20,6 +22,9 @@ export async function updateSupabaseSession(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
+        if (cookiesToSet.some(({ name }) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name))) {
+          sessionCookiesRefreshed = true;
+        }
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
@@ -37,6 +42,24 @@ export async function updateSupabaseSession(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims();
+  if (authCookiePresent && error) {
+    const code = typeof error.code === "string" && /^[a-z0-9_-]{1,80}$/i.test(error.code) ? error.code : null;
+    const status = typeof error.status === "number" && Number.isInteger(error.status) ? error.status : null;
+    console.warn("[DealSe Auth] session claims or refresh rejected", {
+      stage: "session_refresh",
+      cookiePresent: true,
+      refreshAccepted: false,
+      providerErrorCode: code,
+      providerStatus: status,
+    });
+  } else if (authCookiePresent && sessionCookiesRefreshed) {
+    console.info("[DealSe Auth] session cookies refreshed", {
+      stage: "session_refresh",
+      cookiePresent: true,
+      refreshAccepted: !error,
+      claimsPresent: Boolean(data?.claims.sub),
+    });
+  }
   return response;
 }

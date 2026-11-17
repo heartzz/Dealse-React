@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { callDealseApi, type DealSeUser } from "../lib/dealse-api";
+import { callDealseApi, DealseApiError, type DealSeUser } from "../lib/dealse-api";
 import { createSupabaseServerClient } from "../lib/supabase/server";
 
 type Flow = "customer" | "retailer";
@@ -20,11 +20,33 @@ function errorCode(error: unknown): string {
     : "setup";
 }
 
+function logAuthFailure(flow: Flow | "admin", stage: string, error: unknown): void {
+  if (error instanceof DealseApiError) {
+    console.error("[DealSe Auth] flow failed", {
+      flow,
+      stage,
+      apiStatus: error.status || null,
+      apiCategory: error.category,
+    });
+    return;
+  }
+  const providerCode = error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[a-z0-9_-]{1,80}$/i.test(error.code)
+    ? error.code
+    : null;
+  const providerStatus = error && typeof error === "object" && "status" in error && typeof error.status === "number" && Number.isInteger(error.status)
+    ? error.status
+    : null;
+  console.error("[DealSe Auth] flow failed", { flow, stage, providerCode, providerStatus });
+}
+
 async function completeCustomerProfile(
   accessToken: string,
   displayName: string,
+  setStage?: (stage: string) => void,
 ): Promise<void> {
+  setStage?.("api_auth_me");
   await callDealseApi("/auth/me", accessToken);
+  setStage?.("api_profile_update");
   await callDealseApi("/auth/me/profile", accessToken, {
     method: "PUT",
     body: { displayName },
@@ -40,21 +62,33 @@ async function register(flow: Flow, formData: FormData): Promise<string | null> 
     return "invalid";
   }
 
+  let stage = "supabase_signup";
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return "auth";
-    if (!data.session) return "confirm";
+    if (error) {
+      logAuthFailure(flow, stage, error);
+      console.warn("[DealSe Auth] signup completed without a session", { flow, stage, sessionReturned: false, providerRejected: true });
+      return "auth";
+    }
+    if (!data.session) {
+      console.info("[DealSe Auth] signup requires email confirmation", { flow, stage, sessionReturned: false, providerAccepted: true });
+      return "confirm";
+    }
+    console.info("[DealSe Auth] signup returned a session", { flow, stage, sessionReturned: true });
 
-    await completeCustomerProfile(data.session.access_token, displayName);
+    await completeCustomerProfile(data.session.access_token, displayName, (nextStage) => { stage = nextStage; });
     if (flow === "retailer") {
+      stage = "api_retailer_registration";
       await callDealseApi("/retailers", data.session.access_token, {
         method: "POST",
         body: { displayName: businessName, legalName: value(formData, "legalName") || null },
       });
+      console.info("[DealSe Auth] retailer registration accepted", { flow, stage, apiStatus: 201 });
     }
     return null;
   } catch (error) {
+    logAuthFailure(flow, stage, error);
     return errorCode(error);
   }
 }
@@ -64,27 +98,36 @@ async function login(flow: Flow, formData: FormData): Promise<string | null> {
   const password = value(formData, "password");
   if (!validCredentials(email, password)) return "invalid";
 
+  let stage = "supabase_password_sign_in";
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      console.warn("[DealSe Auth] password sign-in rejected", {
-        flow,
-        code: error.code ?? null,
-        status: error.status,
-      });
+      logAuthFailure(flow, stage, error);
+      console.warn("[DealSe Auth] password sign-in rejected", { flow, stage, sessionReturned: false });
       return "auth";
     }
     if (!data.session) {
-      console.warn("[DealSe Auth] password sign-in returned no session", { flow });
+      console.warn("[DealSe Auth] password sign-in returned no session", { flow, stage, sessionReturned: false });
       return "auth";
     }
+    console.info("[DealSe Auth] password sign-in returned a session", { flow, stage, sessionReturned: true });
 
+    stage = "api_auth_me";
     const user = await callDealseApi<DealSeUser>("/auth/me", data.session.access_token);
+    console.info("[DealSe Auth] API accepted the access token and resolved identity", {
+      flow,
+      stage,
+      apiStatus: 200,
+      accessTokenAccepted: true,
+      identityMapped: true,
+      roleCheck: flow === "retailer" ? user.roles.includes("retailer") : user.roles.includes("customer"),
+    });
     if (flow === "retailer" && !user.roles.includes("retailer")) return "retailer_setup";
     if (flow === "customer" && !user.roles.includes("customer")) return "customer_profile";
     return null;
   } catch (error) {
+    logAuthFailure(flow, stage, error);
     return errorCode(error);
   }
 }
@@ -143,16 +186,13 @@ export async function loginAdmin(formData: FormData): Promise<void> {
   const password = value(formData, "password");
   if (!validCredentials(email, password)) redirect("/admin/login?error=invalid");
 
+  let stage = "supabase_password_sign_in";
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      console.warn("[DealSe Admin Auth] password sign-in rejected", {
-        stage: "supabase_password_sign_in",
-        code: typeof error.code === "string" && /^[a-z0-9_]+$/i.test(error.code) ? error.code : "unknown",
-        status: typeof error.status === "number" ? error.status : null,
-        sessionReturned: false,
-      });
+      logAuthFailure("admin", stage, error);
+      console.warn("[DealSe Admin Auth] password sign-in rejected", { stage, sessionReturned: false });
       redirect("/admin/login?error=auth");
     }
     if (!data.session) {
@@ -166,7 +206,15 @@ export async function loginAdmin(formData: FormData): Promise<void> {
       stage: "supabase_password_sign_in",
       sessionReturned: true,
     });
+    stage = "api_auth_me";
     const user = await callDealseApi<DealSeUser>("/auth/me", data.session.access_token);
+    console.info("[DealSe Admin Auth] API accepted the access token and resolved identity", {
+      stage,
+      apiStatus: 200,
+      accessTokenAccepted: true,
+      identityMapped: true,
+      adminRole: user.roles.includes("admin"),
+    });
     if (!user.roles.includes("admin")) {
       console.warn("[DealSe Admin Auth] API identity lacks the admin role", {
         stage: "api_identity_role_check",
@@ -177,6 +225,7 @@ export async function loginAdmin(formData: FormData): Promise<void> {
     }
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    logAuthFailure("admin", stage, error);
     redirect(`/admin/login?error=${errorCode(error)}`);
   }
   redirect("/admin");

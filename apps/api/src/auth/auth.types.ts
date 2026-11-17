@@ -13,5 +13,6 @@ export interface AuthPrincipal {
 
 export interface AuthenticatedRequest {
   headers: { authorization?: string };
+  url?: string;
   authPrincipal?: AuthPrincipal;
 }

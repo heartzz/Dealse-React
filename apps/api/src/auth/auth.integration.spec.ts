@@ -355,11 +355,27 @@ test("NestJS accepts a signed issuer/audience-bound token and rejects a forged s
       .setExpirationTime("5m")
       .sign(forged.privateKey);
     request.headers.authorization = `Bearer ${forgedToken}`;
-    await assert.rejects(guardRef.value!.canActivate(context), (error: unknown) =>
-      typeof error === "object" && error !== null &&
-      "getStatus" in error && typeof error.getStatus === "function" &&
-      error.getStatus() === 401,
-    );
+    const authWarnings: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => { authWarnings.push(args); };
+    try {
+      await assert.rejects(guardRef.value!.canActivate(context), (error: unknown) =>
+        typeof error === "object" && error !== null &&
+        "getStatus" in error && typeof error.getStatus === "function" &&
+        error.getStatus() === 401,
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(authWarnings.length, 1, "failed JWT verification emits one safe diagnostic");
+    assert.equal(authWarnings[0]?.[0], "[DealSe Auth] provider access token rejected");
+    assert.deepEqual(authWarnings[0]?.[1], {
+      stage: "jwt_verification",
+      httpStatus: 401,
+      providerErrorCode: "ERR_JWS_SIGNATURE_VERIFICATION_FAILED",
+      tokenPresented: true,
+    });
+    assert.equal(JSON.stringify(authWarnings).includes(forgedToken), false, "diagnostics never contain the bearer token");
   } finally {
     if (previous.provider === undefined) delete process.env.OIDC_PROVIDER_ID;
     else process.env.OIDC_PROVIDER_ID = previous.provider;
