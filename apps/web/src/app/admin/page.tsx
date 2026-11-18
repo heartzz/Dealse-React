@@ -18,7 +18,7 @@ import {
   verifyStore,
 } from "./actions";
 import { AdminMfaGate } from "./mfa-gate";
-import { pendingAdminTotpFactors } from "./mfa-flow";
+import { pendingAdminTotpFactors, verifiedAdminTotpFactors } from "./mfa-flow";
 import { auditActorLabel } from "./audit-actor-label.mjs";
 
 export const dynamic = "force-dynamic";
@@ -94,7 +94,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   });
   if (claimsData.claims.aal !== "aal2") {
     const { data: factorData, error: factorError } = await supabase.auth.mfa.listFactors();
-    return <main className="admin-shell"><header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link></header><AdminMfaGate hasVerifiedTotp={Boolean(factorData?.totp.length)} hasPendingTotp={Boolean(factorData && pendingAdminTotpFactors(factorData.all).length)} initialError={factorError ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} /></main>;
+    return <main className="admin-shell"><header className="admin-header"><Link className="brand-mark" href="/">DealSe</Link></header><AdminMfaGate hasVerifiedDealSeTotp={Boolean(factorData && verifiedAdminTotpFactors(factorData.all).length)} hasPendingTotp={Boolean(factorData && pendingAdminTotpFactors(factorData.all).length)} initialError={factorError ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} /></main>;
   }
 
   try {
@@ -131,7 +131,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     getData<Page<AuditLog>>("/admin/audit-logs?limit=30", accessToken, { items: [], total: 0, page: 1, limit: 30, totalPages: 0 }),
   ]);
   const errors = [overview, pendingRetailers, activeRetailers, suspendedRetailers, reviewStores, activeStores, pausedStores, publishedDeals, heldDeals, reports, categories, auditLogs].flatMap((section) => section.error ? [section.error] : []);
-  const message = params.error || params.success;
+  const message = params.error === "admin_required"
+    ? "Admin access is required for this action."
+    : params.success === "mfa_verified"
+      ? "DealSe authenticator verified. Admin access is ready."
+      : params.success === "mfa_replaced"
+        ? "New DealSe authenticator verified. The previous DealSe authenticator was removed."
+        : params.success === "mfa_replaced_previous_retained"
+          ? "New DealSe authenticator verified. Your previous authenticator is still active and can be removed after checking your account factors."
+          : params.error || params.success;
 
   return (
     <main className="admin-shell">
@@ -141,7 +149,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </header>
       <div className="admin-content">
         <section className="admin-page-heading" id="overview"><div><span className="admin-eyebrow">DealSe administration</span><h1>Marketplace operations</h1><p>Review retailer onboarding, protect offer quality and keep a clear record of administrative changes.</p></div><span className="admin-user-chip">{user.profile.displayName || user.email || "Administrator"}</span></section>
-        {message ? <p className={`admin-notice ${params.error ? "admin-notice--error" : "admin-notice--success"}`} role="status">{message === "admin_required" ? "Admin access is required for this action." : message}</p> : null}
+        {message ? <p className={`admin-notice ${params.error ? "admin-notice--error" : "admin-notice--success"}`} role="status">{message}</p> : null}
         {errors.length ? <div className="admin-notice admin-notice--error" role="status"><strong>Some sections could not be loaded.</strong><ul>{errors.map((error, index) => <li key={`${index}-${error}`}>{error}</li>)}</ul></div> : null}
 
         <section className="admin-metrics" aria-label="Marketplace overview">

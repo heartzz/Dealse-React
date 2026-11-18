@@ -1,4 +1,5 @@
 export const ADMIN_TOTP_FRIENDLY_NAME = "DealSe administrator";
+export const ADMIN_TOTP_ISSUER = "DealSe";
 
 /** Supabase Auth's JS client returns totp.qr_code as raw SVG (the separate
  * totp.uri field is an otpauth provisioning URI). Convert only SVG markup to a
@@ -18,12 +19,74 @@ export interface MfaFactorSummary {
   friendly_name?: string | null;
 }
 
-export function pendingAdminTotpFactors(factors: readonly MfaFactorSummary[]): MfaFactorSummary[] {
-  return factors.filter((factor) =>
-    factor.factor_type === "totp" &&
-    factor.status === "unverified" &&
-    factor.friendly_name === ADMIN_TOTP_FRIENDLY_NAME,
+export function isDealSeAdminTotp(factor: MfaFactorSummary): boolean {
+  return factor.factor_type === "totp" && (
+    factor.friendly_name === ADMIN_TOTP_FRIENDLY_NAME ||
+    Boolean(factor.friendly_name?.startsWith(`${ADMIN_TOTP_FRIENDLY_NAME} replacement `))
   );
+}
+
+export function pendingAdminTotpFactors(factors: readonly MfaFactorSummary[]): MfaFactorSummary[] {
+  return factors.filter((factor) => isDealSeAdminTotp(factor) && factor.status === "unverified");
+}
+
+export function verifiedAdminTotpFactors(factors: readonly MfaFactorSummary[]): MfaFactorSummary[] {
+  return factors.filter((factor) => isDealSeAdminTotp(factor) && factor.status === "verified");
+}
+
+export function previousAdminTotpFactors(
+  factors: readonly MfaFactorSummary[],
+  keepFactorId: string,
+): MfaFactorSummary[] {
+  return verifiedAdminTotpFactors(factors).filter((factor) => factor.id !== keepFactorId);
+}
+
+export async function verifyAdminTotpAndReplacePrevious(
+  factorId: string,
+  replacing: boolean,
+  verify: () => Promise<{ error: unknown | null }>,
+  listFactors: () => Promise<{ factors: readonly MfaFactorSummary[] | null; error: unknown | null }>,
+  unenroll: (previousFactorId: string) => Promise<{ error: unknown | null }>,
+): Promise<{ verificationError: unknown | null; previousAuthenticatorRetained: boolean }> {
+  const verification = await verify();
+  if (verification.error) return { verificationError: verification.error, previousAuthenticatorRetained: false };
+  if (!replacing) return { verificationError: null, previousAuthenticatorRetained: false };
+
+  try {
+    const listed = await listFactors();
+    if (listed.error || !listed.factors) return { verificationError: null, previousAuthenticatorRetained: true };
+    let previousAuthenticatorRetained = false;
+    for (const factor of previousAdminTotpFactors(listed.factors, factorId)) {
+      try {
+        const result = await unenroll(factor.id);
+        if (result.error) previousAuthenticatorRetained = true;
+      } catch {
+        previousAuthenticatorRetained = true;
+      }
+    }
+    return { verificationError: null, previousAuthenticatorRetained };
+  } catch {
+    return { verificationError: null, previousAuthenticatorRetained: true };
+  }
+}
+
+/** Accept only the provisioning URI returned by Supabase for this signed-in identity. */
+export function isDealSeTotpUri(uri: string, email: string, secret: string): boolean {
+  try {
+    const parsed = new URL(uri);
+    const label = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+    const expectedLabel = `${ADMIN_TOTP_ISSUER}:${email.trim()}`.toLowerCase();
+    return parsed.protocol === "otpauth:" &&
+      parsed.hostname === "totp" &&
+      parsed.searchParams.get("issuer") === ADMIN_TOTP_ISSUER &&
+      label.toLowerCase() === expectedLabel &&
+      parsed.searchParams.get("secret") === secret &&
+      Boolean(secret) &&
+      parsed.searchParams.get("digits") === "6" &&
+      !/localhost/i.test(uri);
+  } catch {
+    return false;
+  }
 }
 
 export async function removePendingAdminTotpFactors(

@@ -3,7 +3,7 @@ import { callDealseApi, type DealSeUser } from "../../lib/dealse-api";
 import { requireWebSession } from "../../lib/auth-session";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { AdminMfaGate } from "./mfa-gate";
-import { pendingAdminTotpFactors } from "./mfa-flow";
+import { pendingAdminTotpFactors, verifiedAdminTotpFactors } from "./mfa-flow";
 
 export async function requireAdminRouteContext() {
   const { accessToken } = await requireWebSession("/admin/login");
@@ -23,7 +23,7 @@ export async function requireAdminRouteContext() {
 export async function AdminMfaRequired() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.mfa.listFactors();
-  return <AdminMfaGate hasVerifiedTotp={Boolean(data?.totp.length)} hasPendingTotp={Boolean(data && pendingAdminTotpFactors(data.all).length)} initialError={error ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} />;
+  return <AdminMfaGate hasVerifiedDealSeTotp={Boolean(data && verifiedAdminTotpFactors(data.all).length)} hasPendingTotp={Boolean(data && pendingAdminTotpFactors(data.all).length)} initialError={error ? "Supabase could not list authenticator factors. Check the Auth configuration and retry." : undefined} />;
 }
 
 export function AdminRouteError({ message }: { message: string }) {
