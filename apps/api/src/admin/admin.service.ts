@@ -49,13 +49,11 @@ export class AdminService {
       { memberships: { some: { role: "OWNER", status: "ACTIVE", user: { is: { emailNormalized: { contains: query.q, mode: "insensitive" } } } } } },
       { memberships: { some: { role: "OWNER", status: "ACTIVE", user: { is: { profile: { is: { displayName: { contains: query.q, mode: "insensitive" } } } } } } } },
     ];
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.retailer.findMany({
+    const items = await this.prisma.retailer.findMany({
         where, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: this.skip(query), take: this.take(query),
         select: { id: true, displayName: true, legalName: true, status: true, createdAt: true, createdBy: { select: { emailNormalized: true, profile: { select: { displayName: true } } } }, memberships: { where: { role: "OWNER", status: "ACTIVE" }, take: 1, select: { user: { select: { id: true, emailNormalized: true, profile: { select: { displayName: true, phoneE164: true } } } } } }, _count: { select: { memberships: true, stores: true } } },
-      }),
-      this.prisma.retailer.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.retailer.count({ where });
     return this.page(items, query, total);
   }
 
@@ -130,17 +128,15 @@ export class AdminService {
       { locality: { contains: query.q, mode: "insensitive" } }, { region: { contains: query.q, mode: "insensitive" } },
       { retailer: { is: { displayName: { contains: query.q, mode: "insensitive" } } } },
     ];
-    const [records, total] = await this.prisma.$transaction([
-      this.prisma.store.findMany({
+    const records = await this.prisma.store.findMany({
         where, include: {
           retailer: { select: { id: true, displayName: true, status: true } },
           category: { select: { id: true, name: true } },
           images: { orderBy: { sortOrder: "asc" }, include: { mediaAsset: { select: { id: true, altText: true, width: true, height: true, processingStatus: true, deletedAt: true } } } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: this.skip(query), take: this.take(query),
-      }),
-      this.prisma.store.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.store.count({ where });
     const ids = records.map(({ id }) => id);
     const locationRows = ids.length ? await this.prisma.$queryRaw<Array<{ id: string; hasCoordinates: boolean }>>`
       SELECT "id"::text AS "id", "location" IS NOT NULL AS "hasCoordinates"
@@ -248,13 +244,11 @@ export class AdminService {
         ],
       }];
     }
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.deal.findMany({
+    const items = await this.prisma.deal.findMany({
         where, include: { store: { select: { id: true, name: true, city: true, locality: true, retailer: { select: { id: true, displayName: true, status: true } } } }, category: { select: { id: true, name: true } }, images: { select: { mediaAssetId: true, sortOrder: true, isPrimary: true } } },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }], skip: this.skip(query), take: this.take(query),
-      }),
-      this.prisma.deal.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.deal.count({ where });
     return this.page(items.map(serializeDealPrices), query, total);
   }
 
@@ -370,8 +364,7 @@ export class AdminService {
 
   async listReports(query: AdminReportQueryDto): Promise<Page<unknown>> {
     const where = { status: query.status ?? DealReportStatus.OPEN };
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.dealReport.findMany({
+    const items = await this.prisma.dealReport.findMany({
         where,
         include: {
           reporter: { select: { id: true, emailNormalized: true, profile: { select: { displayName: true } } } },
@@ -379,21 +372,18 @@ export class AdminService {
           reviewedBy: { select: { id: true, profile: { select: { displayName: true } } } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: this.skip(query), take: this.take(query),
-      }),
-      this.prisma.dealReport.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.dealReport.count({ where });
     return this.page(items, query, total);
   }
 
   async listAuditLogs(query: AdminAuditQueryDto): Promise<Page<unknown>> {
     const where: Prisma.AuditLogWhereInput = { ...(query.entityType ? { entityType: query.entityType } : {}), ...(query.entityId ? { entityId: query.entityId } : {}) };
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.auditLog.findMany({
+    const items = await this.prisma.auditLog.findMany({
         where, include: { actor: { select: { id: true, emailNormalized: true, profile: { select: { displayName: true } } } } },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: this.skip(query), take: this.take(query),
-      }),
-      this.prisma.auditLog.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.auditLog.count({ where });
     return this.page(items, query, total);
   }
 

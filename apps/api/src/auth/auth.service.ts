@@ -52,39 +52,41 @@ export class AuthService {
       throw new ForbiddenException("This account is not active.");
     }
 
-    // Nested writes remain atomic without holding a long-lived interactive
-    // transaction open across several sequential database round trips.
     if (created) return this.toPrincipal(user, identity);
 
+    // Authentication guards run on every protected API request. Keep the
+    // normal path read-only: writing lastSignedInAt and upserting relations on
+    // every request creates avoidable transactions and serializes concurrent
+    // requests for the same user. Sync provider attributes only when changed;
+    // profile/customer-role repair is limited to legacy records that lack one.
     const normalizedEmail = this.normalizedEmail(identity.email);
     const signedInAt = new Date();
+    const emailChanged = Boolean(normalizedEmail && normalizedEmail !== user.emailNormalized);
+    const emailVerifiedChanged = Boolean(identity.emailVerified && !user.emailVerifiedAt);
+    const missingCustomerRole = !user.accountRoles.some(({ role }) => role === AccountRole.CUSTOMER);
+    const missingProfile = !user.profile;
+    const hasChanges = emailChanged || emailVerifiedChanged || missingCustomerRole || missingProfile;
+    if (!hasChanges) return this.toPrincipal(user, identity);
+
     const refreshed = await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        lastSignedInAt: signedInAt,
-        ...(normalizedEmail
+        ...(emailChanged && normalizedEmail
           ? {
               emailNormalized: normalizedEmail,
-              ...(identity.emailVerified
-                ? { emailVerifiedAt: user.emailVerifiedAt ?? signedInAt }
-                : user.emailNormalized !== normalizedEmail
-                  ? { emailVerifiedAt: null }
-                  : {}),
+              emailVerifiedAt: identity.emailVerified ? user.emailVerifiedAt ?? signedInAt : null,
             }
-          : {}),
-        profile: {
-          upsert: {
-            create: {},
-            update: {},
+          : emailVerifiedChanged ? { emailVerifiedAt: signedInAt } : {}),
+        ...(missingProfile ? { profile: { create: {} } } : {}),
+        ...(missingCustomerRole ? {
+          accountRoles: {
+            upsert: {
+              where: { userId_role: { userId: user.id, role: AccountRole.CUSTOMER } },
+              create: { role: AccountRole.CUSTOMER },
+              update: {},
+            },
           },
-        },
-        accountRoles: {
-          upsert: {
-            where: { userId_role: { userId: user.id, role: AccountRole.CUSTOMER } },
-            create: { role: AccountRole.CUSTOMER },
-            update: {},
-          },
-        },
+        } : {}),
       },
       include,
     });

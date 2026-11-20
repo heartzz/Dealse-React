@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createPostgresPoolConfig } from "./prisma.service.js";
+import { createPostgresPoolConfig, POSTGRES_POOL_MAX } from "./prisma.service.js";
 
 test("local PostgreSQL config does not require the Render CA file", () => {
   const connectionString = "postgresql://user:password@127.0.0.1:5432/dealse_dev";
@@ -11,6 +11,8 @@ test("local PostgreSQL config does not require the Render CA file", () => {
 
   assert.equal(config.connectionString, connectionString);
   assert.equal(config.ssl, undefined);
+  assert.equal(config.max, POSTGRES_POOL_MAX);
+  assert.equal(config.max, 10);
 });
 
 test("production PostgreSQL config uses the Aiven CA and verified TLS", () => {
@@ -31,6 +33,8 @@ test("production PostgreSQL config uses the Aiven CA and verified TLS", () => {
     assert.equal(parsedUrl.searchParams.get("application_name"), "dealse");
     assert.equal(parsedUrl.searchParams.has("sslmode"), false);
     assert.equal(parsedUrl.searchParams.has("sslrootcert"), false);
+    assert.equal(config.max, POSTGRES_POOL_MAX);
+    assert.equal(config.max, 10);
     assert.deepEqual(config.ssl, {
       ca: readFileSync(caCertificatePath, "utf8"),
       rejectUnauthorized: true,

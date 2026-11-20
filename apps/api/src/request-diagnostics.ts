@@ -25,18 +25,24 @@ export function requestDiagnostics(
   request: { method?: string; path?: string; url?: string; headers: Record<string, string | string[] | undefined> },
   response: { statusCode: number; setHeader(name: string, value: string): void; on(event: "finish", listener: () => void): void },
   next: () => void,
+  getPoolDiagnostics?: () => Record<string, number>,
 ): void {
+  const startedAt = performance.now();
   const requestId = requestIdFrom(request.headers["x-request-id"]);
   const endpoint = stripControlCharacters((request.path || request.url || "/").split("?", 1)[0]).slice(0, 200);
   request.headers["x-request-id"] = requestId;
   response.setHeader("X-Request-ID", requestId);
   response.on("finish", () => {
+    const durationMs = Math.round(performance.now() - startedAt);
+    const includePool = response.statusCode >= 500 || durationMs >= 1_000;
     console.info("[DealSe API] request completed", {
       endpoint,
       method: request.method || "UNKNOWN",
       status: response.statusCode,
+      durationMs,
       requestId,
       category: requestCategory(response.statusCode),
+      ...(includePool && getPoolDiagnostics ? { pool: getPoolDiagnostics() } : {}),
     });
   });
   next();

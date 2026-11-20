@@ -19,11 +19,9 @@ export class AdminUsersService {
         { profile: { is: { displayName: { contains: query.q, mode: "insensitive" } } } },
       ] } } : {}),
     };
-    const [items, total, pendingInvitations] = await this.prisma.$transaction([
-      this.prisma.adminAccount.findMany({ where, include: { user: { include: { profile: true } }, permissions: true, invitedBy: { select: { emailNormalized: true, profile: { select: { displayName: true } } } } }, orderBy: [{ createdAt: "desc" }, { userId: "asc" }], skip: (query.page - 1) * query.limit, take: query.limit }),
-      this.prisma.adminAccount.count({ where }),
-      this.prisma.adminInvitation.count({ where: { acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } }),
-    ]);
+    const items = await this.prisma.adminAccount.findMany({ where, include: { user: { include: { profile: true } }, permissions: true, invitedBy: { select: { emailNormalized: true, profile: { select: { displayName: true } } } } }, orderBy: [{ createdAt: "desc" }, { userId: "asc" }], skip: (query.page - 1) * query.limit, take: query.limit });
+    const total = await this.prisma.adminAccount.count({ where });
+    const pendingInvitations = await this.prisma.adminInvitation.count({ where: { acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } });
     const invitationRows = await this.prisma.adminInvitation.findMany({ where: { emailNormalized: { in: items.map((item) => item.user.emailNormalized).filter((email): email is string => Boolean(email)) } }, orderBy: { createdAt: "desc" }, select: { emailNormalized: true, acceptedAt: true, revokedAt: true, expiresAt: true } });
     const invitationStatusByEmail = new Map<string, string>();
     for (const invite of invitationRows) if (!invitationStatusByEmail.has(invite.emailNormalized)) invitationStatusByEmail.set(invite.emailNormalized, invite.acceptedAt ? "accepted" : invite.revokedAt ? "revoked" : invite.expiresAt <= new Date() ? "expired" : "pending");

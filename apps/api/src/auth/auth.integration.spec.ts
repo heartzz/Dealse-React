@@ -371,11 +371,23 @@ test("NestJS accepts a signed issuer/audience-bound token and rejects a forged s
       const rootAccess = JSON.parse(rootAccessBody) as { role: string; status: string };
       assert.equal(rootAccess.role, AdminRole.ROOT_ADMIN);
       assert.equal(rootAccess.status, AdminAccountStatus.ACTIVE);
-      for (const check of moduleChecks) {
-        const response = await fetch(`${apiOrigin}/api/v1${check.path}`, { headers: authorization });
-        const body = await response.text();
-        assert.equal(response.status, 200, `${check.label} endpoint returned ${response.status}: ${body}`);
-      }
+      const retailerMembership = await fetch(`${apiOrigin}/api/v1/retailers/mine`, { headers: authorization });
+      const membershipBody = await retailerMembership.text();
+      assert.equal(retailerMembership.status, 200, membershipBody);
+      const memberships = JSON.parse(membershipBody) as Array<{ id: string }>;
+      assert.ok(memberships.some(({ id }) => id === retailer.id), `auth identity retains its active retailer membership after Root Admin promotion: ${membershipBody}`);
+
+      // Reproduce the dashboard's parallel protected reads under the same
+      // authenticated identity. This exercises request authentication and the
+      // admin list queries without relying on slow, sequential calls.
+      const concurrentChecks = moduleChecks.flatMap((check) =>
+        [0, 1].map(async () => {
+          const response = await fetch(`${apiOrigin}/api/v1${check.path}`, { headers: authorization });
+          const body = await response.text();
+          assert.equal(response.status, 200, `${check.label} endpoint returned ${response.status}: ${body}`);
+        }),
+      );
+      await Promise.all(concurrentChecks);
 
       await prisma.adminPermissionGrant.create({ data: { userId: request.authPrincipal.userId, permission: AdminPermissionKey.RETAILERS_REVIEW } });
       const approvedResponse = await fetch(`${apiOrigin}/api/v1/admin/retailers/${retailerIds[0]}/approve`, { method: "POST", headers: authorization });
