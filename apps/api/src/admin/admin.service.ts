@@ -1,10 +1,10 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "../generated/prisma/client.js";
-import { DealReportStatus, DealStatus, RetailerStatus, StoreStatus } from "../generated/prisma/enums.js";
+import { AccountRole, DealReportStatus, DealStatus, RetailerStatus, StoreStatus } from "../generated/prisma/enums.js";
 import type { AuthPrincipal } from "../auth/auth.types.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { DealsService } from "../deals/deals.service.js";
-import type { AdminAuditQueryDto, AdminDealQueryDto, AdminPageQueryDto, AdminReportQueryDto, AdminRetailerQueryDto, AdminStoreQueryDto, CreateCategoryDto, ReviewDealReportDto, UpdateCategoryDto } from "./dto/admin.dto.js";
+import type { AdminAuditQueryDto, AdminCustomerQueryDto, AdminDealQueryDto, AdminPageQueryDto, AdminReportQueryDto, AdminRetailerQueryDto, AdminStoreQueryDto, CreateCategoryDto, ReviewDealReportDto, UpdateCategoryDto } from "./dto/admin.dto.js";
 
 type Page<T> = { items: T[]; page: number; limit: number; total: number; totalPages: number };
 
@@ -38,6 +38,30 @@ export class AdminService {
       this.prisma.dealReport.count({ where: { status: DealReportStatus.OPEN } }),
     ]);
     return { pendingRetailers, unreviewedStores, publishedDeals, openReports };
+  }
+
+  async listCustomers(query: AdminCustomerQueryDto): Promise<Page<unknown>> {
+    const where: Prisma.UserWhereInput = {
+      accountRoles: { some: { role: AccountRole.CUSTOMER } },
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.q ? { OR: [
+        { emailNormalized: { contains: query.q, mode: "insensitive" } },
+        { profile: { is: { displayName: { contains: query.q, mode: "insensitive" } } } },
+      ] } : {}),
+    };
+    const items = await this.prisma.user.findMany({
+      where,
+      select: {
+        id: true, status: true, createdAt: true, lastSignedInAt: true,
+        emailNormalized: true,
+        profile: { select: { displayName: true } },
+        _count: { select: { favourites: true, customerRedemptions: true } },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: this.skip(query), take: this.take(query),
+    });
+    const total = await this.prisma.user.count({ where });
+    return this.page(items, query, total);
   }
 
   async listRetailers(query: AdminRetailerQueryDto): Promise<Page<unknown>> {

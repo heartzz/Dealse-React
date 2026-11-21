@@ -4,7 +4,7 @@ import type { AuthPrincipal } from "../auth/auth.types.js";
 import { RequireAccountRole } from "../auth/require-account-role.decorator.js";
 import { AccountRole, AdminPermissionKey } from "../generated/prisma/enums.js";
 import { AdminService } from "./admin.service.js";
-import { AdminAuditQueryDto, AdminDealQueryDto, AdminReportQueryDto, AdminRetailerQueryDto, AdminStoreQueryDto, CreateCategoryDto, ModerationReasonDto, ReviewDealReportDto, UpdateCategoryDto } from "./dto/admin.dto.js";
+import { AdminAuditQueryDto, AdminCustomerQueryDto, AdminDealQueryDto, AdminReportQueryDto, AdminRetailerQueryDto, AdminStoreQueryDto, CreateCategoryDto, ModerationReasonDto, ReviewDealReportDto, UpdateCategoryDto } from "./dto/admin.dto.js";
 import { AdminPermissionGuard } from "./admin-permission.guard.js";
 import { RequireAdminPermission } from "./require-admin-permission.decorator.js";
 import { MediaService } from "../media/media.service.js";
@@ -31,6 +31,7 @@ export class AdminController {
 
   @Get("me") @RequireAdminPermission(AdminPermissionKey.DASHBOARD_READ) access(@CurrentUser() user: AuthPrincipal) { return this.admin.access(user.userId); }
   @Get("overview") @RequireAdminPermission(AdminPermissionKey.DASHBOARD_READ) overview() { return this.admin.overview(); }
+  @Get("customers") @RequireAdminPermission(AdminPermissionKey.CUSTOMERS_READ) customers(@Query() query: AdminCustomerQueryDto) { return this.admin.listCustomers(query); }
   @Get("retailers") @RequireAdminPermission(AdminPermissionKey.RETAILERS_READ) retailers(@Query() query: AdminRetailerQueryDto) { return this.admin.listRetailers(query); }
   @Get("retailers/:retailerId") @RequireAdminPermission(AdminPermissionKey.RETAILERS_READ) retailer(@Param("retailerId", new ParseUUIDPipe()) id: string) { return this.admin.getRetailer(id); }
   @Post("retailers/:retailerId/approve") @RequireAdminPermission(AdminPermissionKey.RETAILERS_REVIEW) approveRetailer(@CurrentUser() user: AuthPrincipal, @Param("retailerId", new ParseUUIDPipe()) id: string) { return this.admin.approveRetailer(user, id); }

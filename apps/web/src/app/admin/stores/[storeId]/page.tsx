@@ -3,15 +3,16 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { reactivateStoreDetail, rejectStore, suspendStoreDetail, verifyStoreDetail } from "../../actions";
 import { ConfirmButton } from "../../confirm-button";
-import { AdminMfaRequired, AdminRouteError, requireAdminRouteContext } from "../../route-context";
+import { AdminApiRouteError, AdminMfaRequired, AdminPermissionDenied, requireAdminRouteContext } from "../../route-context";
 import { AdminNotice, AuditHistory, BackLink, StatusBadge } from "../../moderation-ui";
-import { loadAdminRecord, safeMessage, type PageParams } from "../../moderation-data";
+import { loadAdminRecord, type PageParams } from "../../moderation-data";
 
 export default async function AdminStoreDetailPage({ params, searchParams }: { params: Promise<{ storeId: string }>; searchParams: Promise<PageParams> }) {
-  const [{ storeId }, query] = await Promise.all([params, searchParams]); const context = await requireAdminRouteContext();
+  const [{ storeId }, query] = await Promise.all([params, searchParams]); const context = await requireAdminRouteContext("STORES_READ");
   if (context.mfaRequired) return <main className="admin-content"><AdminMfaRequired /></main>;
+  if (!context.permissionGranted) return <main className="admin-content"><AdminPermissionDenied /></main>;
   let store: any;
-  try { store = await loadAdminRecord<any>(context.accessToken, "/admin/stores", storeId); } catch (error) { if ((error as { status?: number })?.status === 404) notFound(); return <main className="admin-content"><AdminRouteError message={safeMessage(error)} /></main>; }
+  try { store = await loadAdminRecord<any>(context.accessToken, "/admin/stores", storeId); } catch (error) { if ((error as { status?: number })?.status === 404) notFound(); return <main className="admin-content"><AdminApiRouteError error={error} /></main>; }
   const owner = store.retailer.memberships?.[0]?.user ?? store.retailer.createdBy;
   return <main className="admin-content"><div className="admin-detail-back"><BackLink href="/admin/stores" /></div><header className="admin-page-heading"><div><span className="admin-eyebrow">Store verification</span><h1>{store.name}</h1><p>{[store.addressLine1, store.locality, store.city, store.region, store.postalCode].filter(Boolean).join(", ")}</p></div><StatusBadge status={store.status} /></header><AdminNotice success={query.success} error={query.error} />
     <section className="admin-detail-grid"><article className="admin-panel"><span className="admin-eyebrow">Retailer and owner</span><h2>{store.retailer.displayName}</h2><p>Retailer status: <StatusBadge status={store.retailer.status} /></p><p>{owner?.profile?.displayName || "Owner"} · {owner?.emailNormalized || "Email unavailable"}</p><p><a className="admin-table-link" href={`/admin/retailers/${store.retailer.id}`}>Open retailer record →</a></p></article><article className="admin-panel"><span className="admin-eyebrow">Location and verification</span><h2>{store.category?.name || "Uncategorized store"}</h2><p>{store.latitude != null && store.longitude != null ? `${store.latitude}, ${store.longitude}` : "Map coordinates missing — required for verification"}</p><p>Verified {store.verifiedAt ? new Date(store.verifiedAt).toLocaleString() : "not yet"}</p><p>Address: {store.addressLine1 || "Not provided"}</p></article></section>

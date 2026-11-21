@@ -392,10 +392,15 @@ export class RedemptionsService {
 
   async adminClaims(query: RedemptionPageQueryDto) {
     const pagination = this.pagination(query);
+    const now = new Date();
     const where: Prisma.RedemptionCodeWhereInput = {
       ...(query.dealId ? { dealId: query.dealId } : {}),
       ...(query.customerUserId ? { customerUserId: query.customerUserId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status === RedemptionCodeStatus.EXPIRED
+        ? { OR: [{ status: RedemptionCodeStatus.EXPIRED }, { status: RedemptionCodeStatus.ISSUED, expiresAt: { lte: now } }] }
+        : query.status === RedemptionCodeStatus.ISSUED
+          ? { status: RedemptionCodeStatus.ISSUED, expiresAt: { gt: now } }
+          : query.status ? { status: query.status } : {}),
       ...(query.from || query.to ? { issuedAt: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } } : {}),
     };
     const [items, total] = await this.prisma.$transaction([

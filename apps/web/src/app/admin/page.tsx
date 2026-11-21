@@ -20,6 +20,7 @@ import {
 import { AdminMfaGate } from "./mfa-gate";
 import { pendingAdminTotpFactors, verifiedAdminTotpFactors } from "./mfa-flow";
 import { auditActorLabel } from "./audit-actor-label.mjs";
+import { CopyableId } from "./copyable-id";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           ? "New DealSe authenticator verified. Your previous authenticator is still active and can be removed after checking your account factors."
           : params.error || params.success;
 
+  if (errors.length) {
+    return <main className="admin-content"><header className="admin-page-heading"><div><span className="admin-eyebrow">DealSe administration</span><h1>Marketplace operations</h1><p>Dashboard data is temporarily unavailable. No failed request is being shown as a zero count.</p></div></header>
+      <div className="admin-notice admin-notice--error" role="alert"><strong>Some Admin data could not be loaded.</strong><ul>{errors.map((error, index) => <li key={`${index}-${error}`}>{error}</li>)}</ul><Link className="admin-button admin-button--quiet" href="/admin">Retry</Link></div>
+    </main>;
+  }
+
   return (
     <main className="admin-shell">
       <header className="admin-header">
@@ -188,7 +195,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </section>
 
         <section className="admin-panel" id="audit"><div className="admin-section-heading"><div><span className="admin-eyebrow">Accountability</span><h2>Recent admin activity</h2><p>Administrative state changes are written to PostgreSQL in the same transaction.</p></div><span className="admin-count">{auditLogs.value.total}</span></div>
-          {auditLogs.value.items.length ? <div className="admin-audit-list">{auditLogs.value.items.map((entry) => <article className="admin-audit-row" key={entry.id}><div><strong>{entry.action.replaceAll(".", " ")}</strong><span>{entry.entityType} · {entry.entityId}</span></div><div><strong>{auditActorLabel(entry.actor, entry.actorType)}</strong><span>{date(entry.createdAt)}</span></div></article>)}</div> : <p className="admin-empty">No administrative actions have been recorded yet.</p>}
+          {auditLogs.value.items.length ? <div className="admin-audit-list">{auditLogs.value.items.map((entry) => <article className="admin-audit-row" key={entry.id}><div><strong>{entry.action.replaceAll(".", " ")}</strong><span>{entry.entityType}</span>{entry.entityId ? <CopyableId value={entry.entityId} label={`Copy ${entry.entityType} ID`} /> : null}</div><div><strong>{auditActorLabel(entry.actor, entry.actorType)}</strong><span>{date(entry.createdAt)}</span></div></article>)}</div> : <p className="admin-empty">No administrative actions have been recorded yet.</p>}
         </section>
       </div>
     </main>

@@ -3,15 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { approveRetailerDetail, reactivateRetailerDetail, rejectRetailer, suspendRetailerDetail } from "../../actions";
 import { ConfirmButton } from "../../confirm-button";
-import { AdminMfaRequired, AdminRouteError, requireAdminRouteContext } from "../../route-context";
+import { AdminApiRouteError, AdminMfaRequired, AdminPermissionDenied, requireAdminRouteContext } from "../../route-context";
 import { AdminNotice, AuditHistory, BackLink, StatusBadge } from "../../moderation-ui";
-import { loadAdminRecord, safeMessage, type PageParams } from "../../moderation-data";
+import { loadAdminRecord, type PageParams } from "../../moderation-data";
 
 export default async function AdminRetailerDetailPage({ params, searchParams }: { params: Promise<{ retailerId: string }>; searchParams: Promise<PageParams> }) {
-  const [{ retailerId }, query] = await Promise.all([params, searchParams]); const context = await requireAdminRouteContext();
+  const [{ retailerId }, query] = await Promise.all([params, searchParams]); const context = await requireAdminRouteContext("RETAILERS_READ");
   if (context.mfaRequired) return <main className="admin-content"><AdminMfaRequired /></main>;
+  if (!context.permissionGranted) return <main className="admin-content"><AdminPermissionDenied /></main>;
   let retailer: any;
-  try { retailer = await loadAdminRecord<any>(context.accessToken, "/admin/retailers", retailerId); } catch (error) { if ((error as { status?: number })?.status === 404) notFound(); return <main className="admin-content"><AdminRouteError message={safeMessage(error)} /></main>; }
+  try { retailer = await loadAdminRecord<any>(context.accessToken, "/admin/retailers", retailerId); } catch (error) { if ((error as { status?: number })?.status === 404) notFound(); return <main className="admin-content"><AdminApiRouteError error={error} /></main>; }
   const owner = retailer.memberships?.find((membership: any) => membership.role === "OWNER")?.user ?? retailer.createdBy;
   return <main className="admin-content"><div className="admin-detail-back"><BackLink href="/admin/retailers" /></div><header className="admin-page-heading"><div><span className="admin-eyebrow">Retailer record</span><h1>{retailer.displayName}</h1><p>{retailer.legalName || "Legal name not provided"} · Created {new Date(retailer.createdAt).toLocaleDateString()}</p></div><StatusBadge status={retailer.status} /></header>
     <AdminNotice success={query.success} error={query.error} />

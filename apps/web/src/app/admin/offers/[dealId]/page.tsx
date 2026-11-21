@@ -3,17 +3,18 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { approveOffer, pauseOffer, rejectOffer, resumeOffer } from "../../actions";
 import { ConfirmButton } from "../../confirm-button";
-import { AdminMfaRequired, AdminRouteError, requireAdminRouteContext } from "../../route-context";
+import { AdminApiRouteError, AdminMfaRequired, AdminPermissionDenied, requireAdminRouteContext } from "../../route-context";
 import { AdminNotice, AuditHistory, BackLink, StatusBadge } from "../../moderation-ui";
-import { loadAdminRecord, safeMessage, type PageParams } from "../../moderation-data";
+import { loadAdminRecord, type PageParams } from "../../moderation-data";
 
 const money = (minor: string | number | null, currency: string | null) => minor == null ? "—" : `${currency || ""} ${(Number(minor) / 100).toFixed(2)}`;
 
 export default async function AdminOfferDetailPage({ params, searchParams }: { params: Promise<{ dealId: string }>; searchParams: Promise<PageParams> }) {
-  const [{ dealId }, query] = await Promise.all([params, searchParams]); const context = await requireAdminRouteContext();
+  const [{ dealId }, query] = await Promise.all([params, searchParams]); const context = await requireAdminRouteContext("OFFERS_READ");
   if (context.mfaRequired) return <main className="admin-content"><AdminMfaRequired /></main>;
+  if (!context.permissionGranted) return <main className="admin-content"><AdminPermissionDenied /></main>;
   let deal: any;
-  try { deal = await loadAdminRecord<any>(context.accessToken, "/admin/deals", dealId); } catch (error) { if ((error as { status?: number })?.status === 404) notFound(); return <main className="admin-content"><AdminRouteError message={safeMessage(error)} /></main>; }
+  try { deal = await loadAdminRecord<any>(context.accessToken, "/admin/deals", dealId); } catch (error) { if ((error as { status?: number })?.status === 404) notFound(); return <main className="admin-content"><AdminApiRouteError error={error} /></main>; }
   const store = deal.store; const retailer = store.retailer; const owner = retailer.memberships?.[0]?.user ?? retailer.createdBy;
   const status = deal.moderationHoldAt ? "SUSPENDED" : deal.endsAt && new Date(deal.endsAt) <= new Date() && deal.status !== "ENDED" ? "EXPIRED" : deal.status;
   return <main className="admin-content"><div className="admin-detail-back"><BackLink href="/admin/offers" /></div><header className="admin-page-heading"><div><span className="admin-eyebrow">Offer review</span><h1>{deal.title}</h1><p>{deal.summary || "No summary provided"}</p></div><StatusBadge status={status} /></header><AdminNotice success={query.success} error={query.error} />

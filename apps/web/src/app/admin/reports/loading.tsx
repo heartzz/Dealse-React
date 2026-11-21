@@ -1,0 +1,3 @@
+export default function AdminReportsLoading() {
+  return <main className="admin-content"><header className="admin-page-heading"><div><span className="admin-eyebrow">Marketplace analytics</span><h1>Reports</h1><p>Loading verified marketplace metrics…</p></div></header><section className="analytics-kpis" aria-label="Loading report metrics">{Array.from({ length: 7 }, (_, index) => <div className="analytics-skeleton" key={index} />)}</section><div className="analytics-chart-grid">{Array.from({ length: 4 }, (_, index) => <div className="analytics-skeleton analytics-skeleton--chart" key={index} />)}</div></main>;
+}

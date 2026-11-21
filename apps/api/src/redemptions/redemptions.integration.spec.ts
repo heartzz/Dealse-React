@@ -316,4 +316,8 @@ test("retailer tenant scope and admin inspection use existing redemption permiss
   );
   const query = Object.assign(new RedemptionPageQueryDto(), { page: 1, limit: 20 });
   assert.equal((await redemptions.adminClaims(query)).items.some((item) => item.id === issued.claim.id), true);
+  const expiredAt = new Date(Date.now() - 1_000);
+  await prisma.redemptionCode.update({ where: { id: issued.claim.id }, data: { issuedAt: new Date(expiredAt.getTime() - 60_000), expiresAt: expiredAt } });
+  const expiredQuery = Object.assign(new RedemptionPageQueryDto(), { page: 1, limit: 20, status: RedemptionCodeStatus.EXPIRED });
+  assert.equal((await redemptions.adminClaims(expiredQuery)).items.some((item) => item.id === issued.claim.id), true, "the expired filter includes issued codes whose expiry timestamp has passed");
 });

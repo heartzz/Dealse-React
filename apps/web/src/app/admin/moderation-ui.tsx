@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CopyableId } from "./copyable-id";
 
 export type AdminPageData<T = Record<string, any>> = { items: T[]; page: number; limit: number; total: number; totalPages: number };
 
@@ -37,5 +38,5 @@ export function StatusBadge({ status }: { status: unknown }) {
 export function BackLink({ href = "/admin" }: { href?: string }) { return <Link className="admin-back-link" href={href}>← Back to list</Link>; }
 
 export function AuditHistory({ items }: { items: any[] }) {
-  return <section className="admin-panel"><div className="admin-section-heading"><div><span className="admin-eyebrow">Accountability</span><h2>Application and action history</h2></div></div>{items?.length ? <div className="admin-audit-list">{items.map((entry) => <article className="admin-audit-row" key={entry.id}><div><strong>{String(entry.action).replaceAll(".", " ")}</strong><span>{entry.entityType} · {entry.entityId}</span>{entry.afterSnapshot?.reason ? <span>Reason: {entry.afterSnapshot.reason}</span> : null}</div><div><strong>{entry.actor?.profile?.displayName || entry.actor?.emailNormalized || entry.actorType}</strong><span>{new Date(entry.createdAt).toLocaleString()}</span></div></article>)}</div> : <p className="admin-empty">No application or moderation history is recorded.</p>}</section>;
+  return <section className="admin-panel"><div className="admin-section-heading"><div><span className="admin-eyebrow">Accountability</span><h2>Application and action history</h2></div></div>{items?.length ? <div className="admin-audit-list">{items.map((entry) => <article className="admin-audit-row" key={entry.id}><div><strong>{String(entry.action).replaceAll(".", " ")}</strong><span>{entry.entityType}</span>{entry.entityId ? <CopyableId value={entry.entityId} label={`Copy ${entry.entityType} ID`} /> : null}{entry.afterSnapshot?.reason ? <span>Reason: {entry.afterSnapshot.reason}</span> : null}</div><div><strong>{entry.actor?.profile?.displayName || entry.actor?.emailNormalized || entry.actorType}</strong><span>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(entry.createdAt))}</span></div></article>)}</div> : <p className="admin-empty">No application or moderation history is recorded.</p>}</section>;
 }

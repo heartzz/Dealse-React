@@ -1,6 +1,6 @@
 import { Transform, Type } from "class-transformer";
 import { IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
-import { DealReportReason, DealReportStatus, DealStatus, RetailerStatus, StoreStatus } from "../../generated/prisma/enums.js";
+import { DealReportReason, DealReportStatus, DealStatus, RetailerStatus, StoreStatus, UserStatus } from "../../generated/prisma/enums.js";
 
 const trimmed = ({ value }: { value: unknown }) => typeof value === "string" ? value.trim() : value;
 const queryNumber = (fallback: number) => ({ value }: { value: unknown }) => value === undefined ? fallback : Number(value);
@@ -13,6 +13,12 @@ export class AdminPageQueryDto {
 export class AdminRetailerQueryDto extends AdminPageQueryDto {
   @IsOptional() @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value) @IsEnum(RetailerStatus) status?: RetailerStatus;
   @IsOptional() @Transform(({ value }) => value === true || value === "true") @IsBoolean() all?: boolean;
+  @IsOptional() @Transform(trimmed) @IsString() @Length(1, 100) q?: string;
+}
+
+export class AdminCustomerQueryDto extends AdminPageQueryDto {
+  @IsOptional() @Transform(({ value }) => value === true || value === "true") @IsBoolean() all?: boolean;
+  @IsOptional() @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value) @IsEnum(UserStatus) status?: UserStatus;
   @IsOptional() @Transform(trimmed) @IsString() @Length(1, 100) q?: string;
 }
 
